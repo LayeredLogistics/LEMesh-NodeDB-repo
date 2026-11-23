@@ -2,6 +2,7 @@ package us.lemesh.nodedb.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -56,7 +57,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -942,6 +945,17 @@ internal fun CompactNodeMapSearchBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            Image(
+                painter = painterResource(id = R.drawable.lemesh_brand_emblem),
+                contentDescription = stringResource(R.string.lemesh_brand_emblem_cd),
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(26.dp)
+                    .clip(CircleShape)
+                    .border(1.dp, TacticalOutline, CircleShape)
+                    .testTag("toolbar_lemesh_emblem")
+            )
+
             Icon(
                 imageVector = Icons.Default.Search,
                 contentDescription = null,

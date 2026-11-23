@@ -190,4 +190,5 @@
     <string name="align_hud_no_target">Select a relay or peer node to aim</string>
     <string name="compass_align_fab_cd">Toggle antenna alignment compass</string>
     <string name="diagnostics_observed_vs_predicted">Observed vs. Predicted RF Telemetry</string>
+    <string name="lemesh_brand_emblem_cd">Lake Effect Mesh emblem</string>
 </resources>

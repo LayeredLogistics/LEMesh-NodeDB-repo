@@ -1,11 +1,13 @@
 package us.lemesh.nodedb
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -32,6 +34,7 @@ import us.lemesh.nodedb.data.LiveTelemetryPayloadParser
 import us.lemesh.nodedb.data.LosAnalyzer
 import us.lemesh.nodedb.data.LosEndpoint
 import us.lemesh.nodedb.data.MapExportEngine
+import us.lemesh.nodedb.data.MapExportSummary
 import us.lemesh.nodedb.data.MeshNode
 import us.lemesh.nodedb.data.MqttV311WireCodec
 import us.lemesh.nodedb.data.NeighborLinkTelemetry
@@ -44,6 +47,7 @@ import us.lemesh.nodedb.data.TerrariumTileGrid
 import us.lemesh.nodedb.data.ViewshedEngine
 import us.lemesh.nodedb.data.ViewshedParams
 import us.lemesh.nodedb.ui.AntennaAlignmentHudOverlay
+import us.lemesh.nodedb.ui.CompactNodeMapSearchBar
 import us.lemesh.nodedb.ui.LiveSyncToolbarBadge
 import us.lemesh.nodedb.ui.PropagationFadeMarginStrip
 import us.lemesh.nodedb.ui.state.NodeInventoryState
@@ -546,5 +550,54 @@ class Phase4DiagnosticsSyncOutreachTest {
         composeRule.onNodeWithTag("antenna_alignment_hud").assertIsDisplayed()
         composeRule.onNodeWithTag("antenna_alignment_close_button").assertIsDisplayed().performClick()
         assertTrue(hudClosed)
+    }
+
+    @Test
+    fun lemeshBrandEmblem_decodesRendersInToolbarAndExportsCleanly() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val emblem = MapExportEngine.decodeBrandEmblemBitmap(context)
+        assertNotNull("Expected lemesh_brand_emblem drawable to decode", emblem)
+        assertTrue(emblem!!.width > 0 && emblem.height > 0)
+
+        val dummyMap = Bitmap.createBitmap(640, 420, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.DKGRAY) }
+        val summary = MapExportSummary(
+            screenTitle = "Node Map Snapshot",
+            subtitle = "Lake Effect Mesh • lemesh.us",
+            baseLayerName = "Dark Tactical",
+            timestampLabel = "2026-11-23 12:40",
+            metricLines = listOf("12 GPS nodes • 906.875 MHz"),
+            legendItems = emptyList(),
+            showRssiGradient = false
+        )
+        val snapshot = MapExportEngine.composeAnnotatedExportBitmap(dummyMap, summary, emblem)
+        assertTrue(snapshot.width >= 640)
+        assertTrue(snapshot.height > dummyMap.height)
+
+        val spec = GeoJsonReportExporter.buildHostOutreachSpec(
+            nodes = emptyList(),
+            candidateSiteTitle = "Presque Isle Relay"
+        )
+        val outreach = MapExportEngine.composeHostOutreachCardBitmap(dummyMap, spec, emblem)
+        assertTrue(outreach.width >= 840)
+        assertTrue(outreach.height > dummyMap.height)
+
+        snapshot.recycle()
+        outreach.recycle()
+        dummyMap.recycle()
+        emblem.recycle()
+
+        composeRule.setContent {
+            LEMeshTheme {
+                CompactNodeMapSearchBar(
+                    searchQuery = "",
+                    activeFilterCount = 0,
+                    savedLayersActiveCount = 0,
+                    onSearchQueryChange = {},
+                    onOpenFilters = {},
+                    onOpenLayers = {}
+                )
+            }
+        }
+        composeRule.onNodeWithTag("toolbar_lemesh_emblem").assertIsDisplayed()
     }
 }

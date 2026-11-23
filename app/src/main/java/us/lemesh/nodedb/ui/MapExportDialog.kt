@@ -180,7 +180,8 @@ fun MapExportHost(
                         }
                         val summary = buildSummary()
                         withContext(Dispatchers.Default) {
-                            val composed = MapExportEngine.composeAnnotatedExportBitmap(rawBitmap, summary)
+                            val emblemBitmap = MapExportEngine.decodeBrandEmblemBitmap(context)
+                            val composed = MapExportEngine.composeAnnotatedExportBitmap(rawBitmap, summary, emblemBitmap)
                             try {
                                 MapExportEngine.encodeBitmapToPngBytes(composed)
                             } finally {
@@ -189,6 +190,9 @@ fun MapExportHost(
                                 }
                                 if (!rawBitmap.isRecycled) {
                                     rawBitmap.recycle()
+                                }
+                                if (emblemBitmap != null && !emblemBitmap.isRecycled) {
+                                    emblemBitmap.recycle()
                                 }
                             }
                         }
@@ -203,7 +207,8 @@ fun MapExportHost(
                         }
                         val spec = buildHostOutreachSpec?.invoke() ?: error("Host Outreach Card unavailable.")
                         withContext(Dispatchers.Default) {
-                            val composed = MapExportEngine.composeHostOutreachCardBitmap(rawBitmap, spec)
+                            val emblemBitmap = MapExportEngine.decodeBrandEmblemBitmap(context)
+                            val composed = MapExportEngine.composeHostOutreachCardBitmap(rawBitmap, spec, emblemBitmap)
                             try {
                                 MapExportEngine.encodeBitmapToPngBytes(composed)
                             } finally {
@@ -212,6 +217,9 @@ fun MapExportHost(
                                 }
                                 if (!rawBitmap.isRecycled) {
                                     rawBitmap.recycle()
+                                }
+                                if (emblemBitmap != null && !emblemBitmap.isRecycled) {
+                                    emblemBitmap.recycle()
                                 }
                             }
                         }

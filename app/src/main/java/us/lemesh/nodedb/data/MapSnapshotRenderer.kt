@@ -3,6 +3,7 @@ package us.lemesh.nodedb.data
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.LinearGradient
 import android.graphics.Paint
@@ -16,6 +17,7 @@ import androidx.core.graphics.createBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.osmdroid.views.MapView
+import us.lemesh.nodedb.R
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.Locale
@@ -85,9 +87,72 @@ object MapSnapshotRenderer {
         }
     }
 
+    /**
+     * Decodes a right-sized Lake Effect Mesh brand emblem bitmap for PNG exports.
+     * Caller owns recycling the returned [Bitmap].
+     */
+    fun decodeBrandEmblemBitmap(
+        context: Context,
+        maxEdgePx: Int = 192
+    ): Bitmap? = runCatching {
+        val boundsOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeResource(context.resources, R.drawable.lemesh_brand_emblem, boundsOpts)
+        var sampleSize = 1
+        val maxSrc = max(boundsOpts.outWidth, boundsOpts.outHeight)
+        while (maxSrc > 0 && (maxSrc / (sampleSize * 2)) >= maxEdgePx) {
+            sampleSize *= 2
+        }
+        val decodeOpts = BitmapFactory.Options().apply {
+            inSampleSize = sampleSize
+            inPreferredConfig = Bitmap.Config.ARGB_8888
+        }
+        BitmapFactory.decodeResource(context.resources, R.drawable.lemesh_brand_emblem, decodeOpts)
+    }.getOrNull()
+
+    private fun drawCircularEmblemBadge(
+        canvas: Canvas,
+        emblemBitmap: Bitmap,
+        centerX: Float,
+        centerY: Float,
+        radius: Float,
+        borderColorArgb: Int,
+        borderWidthPx: Float,
+        alphaInt: Int = 255,
+        haloColorArgb: Int? = null
+    ) {
+        if (emblemBitmap.isRecycled || radius <= 1f) return
+        if (haloColorArgb != null) {
+            val haloPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = haloColorArgb
+                style = Paint.Style.FILL
+            }
+            canvas.drawCircle(centerX, centerY, radius + borderWidthPx * 2.2f, haloPaint)
+        }
+        val destRect = RectF(centerX - radius, centerY - radius, centerX + radius, centerY + radius)
+        val clipPath = Path().apply {
+            addCircle(centerX, centerY, radius, Path.Direction.CW)
+        }
+        val bmpPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+            alpha = alphaInt.coerceIn(0, 255)
+        }
+        canvas.save()
+        canvas.clipPath(clipPath)
+        canvas.drawBitmap(emblemBitmap, null, destRect, bmpPaint)
+        canvas.restore()
+
+        val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = borderColorArgb
+            style = Paint.Style.STROKE
+            strokeWidth = borderWidthPx
+            alpha = alphaInt.coerceIn(0, 255)
+        }
+        canvas.drawCircle(centerX, centerY, radius, ringPaint)
+    }
+
     fun composeAnnotatedExportBitmap(
         mapBitmap: Bitmap,
-        summary: MapExportSummary
+        summary: MapExportSummary,
+        emblemBitmap: Bitmap? = null
     ): Bitmap {
         val width = max(640, mapBitmap.width).coerceAtMost(MAX_EXPORT_EDGE_PX)
         val mapScale = if (mapBitmap.width > width) width.toFloat() / mapBitmap.width.toFloat() else 1f
@@ -205,6 +270,24 @@ object MapSnapshotRenderer {
                 canvas.drawBitmap(mapBitmap, null, destRect, bitmapPaint)
             }
 
+            if (emblemBitmap != null && !emblemBitmap.isRecycled) {
+                val wmRadius = (30f * s).coerceIn(22f, 52f)
+                val wmMargin = 18f * s
+                val wmCx = width - wmMargin - wmRadius
+                val wmCy = headerHeight + mapHeight - wmMargin - wmRadius
+                drawCircularEmblemBadge(
+                    canvas = canvas,
+                    emblemBitmap = emblemBitmap,
+                    centerX = wmCx,
+                    centerY = wmCy,
+                    radius = wmRadius,
+                    borderColorArgb = 0xFF334155.toInt(),
+                    borderWidthPx = max(1.5f, 2f * s),
+                    alphaInt = 216,
+                    haloColorArgb = 0x990A0F14.toInt()
+                )
+            }
+
             val footerTop = (headerHeight + mapHeight).toFloat()
             canvas.drawRect(0f, footerTop, width.toFloat(), totalHeight.toFloat(), panelPaint)
             canvas.drawLine(0f, footerTop + 1f, width.toFloat(), footerTop + 1f, borderPaint)
@@ -287,7 +370,8 @@ object MapSnapshotRenderer {
      */
     fun composeHostOutreachCardBitmap(
         mapBitmap: Bitmap,
-        spec: HostOutreachSpec
+        spec: HostOutreachSpec,
+        emblemBitmap: Bitmap? = null
     ): Bitmap {
         val width = max(840, mapBitmap.width).coerceAtMost(MAX_EXPORT_EDGE_PX)
         val mapScale = if (mapBitmap.width > width) width.toFloat() / mapBitmap.width.toFloat() else 1f
@@ -340,13 +424,39 @@ object MapSnapshotRenderer {
                 textAlign = Paint.Align.RIGHT
             }
 
+            val hasEmblem = emblemBitmap != null && !emblemBitmap.isRecycled
+            val emblemRadius = if (hasEmblem) (44f * s) else 0f
+            if (hasEmblem && emblemBitmap != null) {
+                val emblemCx = padH + emblemRadius
+                val emblemCy = 6f * s + (headerHeight - 6f * s) / 2f
+                drawCircularEmblemBadge(
+                    canvas = canvas,
+                    emblemBitmap = emblemBitmap,
+                    centerX = emblemCx,
+                    centerY = emblemCy,
+                    radius = emblemRadius,
+                    borderColorArgb = 0xFF22C55E.toInt(),
+                    borderWidthPx = max(2f, 2.2f * s),
+                    alphaInt = 255,
+                    haloColorArgb = 0x660A0F14.toInt()
+                )
+            }
+
+            val textStartX = if (hasEmblem) padH + emblemRadius * 2f + 18f * s else padH
+            val maxContentW = (width - textStartX - padH).coerceAtLeast(120f)
+
             var y = 32f * s
-            canvas.drawText("LAKE EFFECT MESH  •  LEMESH.US  •  HOST OUTREACH SPEC CARD", padH, y, brandPaint)
+            val timestampW = rightStampPaint.measureText(spec.timestampLabel) + 14f * s
+            val brandLine = ellipsizeText(
+                "LAKE EFFECT MESH  •  LEMESH.US  •  HOST OUTREACH SPEC CARD",
+                brandPaint,
+                (maxContentW - timestampW).coerceAtLeast(80f)
+            )
+            canvas.drawText(brandLine, textStartX, y, brandPaint)
             canvas.drawText(spec.timestampLabel, width - padH, y, rightStampPaint)
 
             y += 38f * s
-            val maxContentW = width - padH * 2f
-            canvas.drawText(ellipsizeText(spec.siteTitle, titlePaint, maxContentW), padH, y, titlePaint)
+            canvas.drawText(ellipsizeText(spec.siteTitle, titlePaint, maxContentW), textStartX, y, titlePaint)
 
             y += 28f * s
             val radiusMiles = MeshGeoUtils.kmToMiles(spec.estimatedRadiusKm)
@@ -360,11 +470,11 @@ object MapSnapshotRenderer {
                 spec.estimatedRadiusKm,
                 areaPart
             )
-            canvas.drawText(ellipsizeText(statsLine, subPaint, maxContentW), padH, y, subPaint)
+            canvas.drawText(ellipsizeText(statsLine, subPaint, maxContentW), textStartX, y, subPaint)
 
             y += 28f * s
             val privacyNotice = "Privacy Filter: ${spec.omittedPersonalNodeCount} personal node(s) omitted • ${spec.maskedPortableSiteCount} portable site(s) masked (~1 km) • No property photos"
-            canvas.drawText(ellipsizeText(privacyNotice, rightStampPaint.apply { textAlign = Paint.Align.LEFT }, maxContentW), padH, y, rightStampPaint)
+            canvas.drawText(ellipsizeText(privacyNotice, rightStampPaint.apply { textAlign = Paint.Align.LEFT }, maxContentW), textStartX, y, rightStampPaint)
 
             // Map viewport image
             if (mapScale == 1f) {

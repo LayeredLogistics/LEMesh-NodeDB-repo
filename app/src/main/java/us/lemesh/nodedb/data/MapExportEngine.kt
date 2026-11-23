@@ -197,15 +197,22 @@ object MapExportEngine {
         candidateSiteTitle = candidateSiteTitle
     )
 
+    fun decodeBrandEmblemBitmap(
+        context: Context,
+        maxEdgePx: Int = 192
+    ): Bitmap? = MapSnapshotRenderer.decodeBrandEmblemBitmap(context, maxEdgePx)
+
     fun composeAnnotatedExportBitmap(
         mapBitmap: Bitmap,
-        summary: MapExportSummary
-    ): Bitmap = MapSnapshotRenderer.composeAnnotatedExportBitmap(mapBitmap, summary)
+        summary: MapExportSummary,
+        emblemBitmap: Bitmap? = null
+    ): Bitmap = MapSnapshotRenderer.composeAnnotatedExportBitmap(mapBitmap, summary, emblemBitmap)
 
     fun composeHostOutreachCardBitmap(
         mapBitmap: Bitmap,
-        spec: HostOutreachSpec
-    ): Bitmap = MapSnapshotRenderer.composeHostOutreachCardBitmap(mapBitmap, spec)
+        spec: HostOutreachSpec,
+        emblemBitmap: Bitmap? = null
+    ): Bitmap = MapSnapshotRenderer.composeHostOutreachCardBitmap(mapBitmap, spec, emblemBitmap)
 
     fun encodeBitmapToPngBytes(bitmap: Bitmap): ByteArray =
         MapSnapshotRenderer.encodeBitmapToPngBytes(bitmap)
