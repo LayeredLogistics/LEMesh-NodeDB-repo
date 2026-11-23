@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Concentric mesh RF rings + central tower beacon within 66dp safe zone -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="M54,48a6,6 0 1,0 0,12a6,6 0 1,0 0,-12z" />
+    <path
+        android:fillColor="#000000"
+        android:pathData="M51,60h6l3,18h-12z" />
+    <path
+        android:strokeColor="#000000"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M39.5,39.5a20.5,20.5 0 0,1 29,0M33.5,33.5a29,29 0 0,1 41,0" />
+    <path
+        android:strokeColor="#000000"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M39.5,68.5a20.5,20.5 0 0,0 29,0" />
+</vector>

@@ -1,0 +1,6 @@
+{
+  "name": "LEMesh NodeDB Map",
+  "description": "Tactical offline-capable Meshtastic NodeDB JSON parser, RF sightline visualizer, and node telemetry inspector built with osmdroid and Jetpack Compose.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
