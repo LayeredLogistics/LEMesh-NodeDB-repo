@@ -89,6 +89,10 @@ data class LiveTelemetryUpdate(
     val channelUtilization: Double? = null,
     val airUtilTx: Double? = null,
     val uptimeSeconds: Long? = null,
+    val temperature: Double? = null,
+    val relativeHumidity: Double? = null,
+    val barometricPressure: Double? = null,
+    val isSelf: Boolean? = null,
     val neighborLinks: List<NeighborLinkTelemetry>? = null,
     val rawJson: String? = null
 ) {

@@ -25,8 +25,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.osmdroid.config.Configuration
 import us.lemesh.nodedb.data.DeviceLocationResolver
 import us.lemesh.nodedb.data.LiveMeshSyncRepository
+import us.lemesh.nodedb.data.MeshtasticBleRepository
 import us.lemesh.nodedb.data.OfflineDemPackManager
 import us.lemesh.nodedb.data.RfEnvironmentStateHolder
+import us.lemesh.nodedb.ui.BleSyncActions
 import us.lemesh.nodedb.ui.BridgeModeActions
 import us.lemesh.nodedb.ui.BridgePlacementTarget
 import us.lemesh.nodedb.ui.BridgeViewModel
@@ -52,10 +54,12 @@ class WorkspaceStateViewModel(application: Application) : AndroidViewModel(appli
     val coordinator = RfWorkspaceCoordinator()
     val environmentHolder = RfEnvironmentStateHolder()
     val liveSyncRepository = LiveMeshSyncRepository(application)
+    val bleRepository = MeshtasticBleRepository(application)
 
     override fun onCleared() {
         super.onCleared()
         liveSyncRepository.disconnect()
+        bleRepository.disconnect()
     }
 }
 
@@ -73,7 +77,8 @@ class MainActivity : ComponentActivity() {
                     inventoryHolder = workspaceStateViewModel.inventoryHolder,
                     coordinator = workspaceStateViewModel.coordinator,
                     environmentHolder = workspaceStateViewModel.environmentHolder,
-                    liveSyncRepository = workspaceStateViewModel.liveSyncRepository
+                    liveSyncRepository = workspaceStateViewModel.liveSyncRepository,
+                    bleRepository = workspaceStateViewModel.bleRepository
                 ) as T
             }
         }
@@ -144,6 +149,7 @@ class MainActivity : ComponentActivity() {
                 val coordinatorState by workspaceStateViewModel.coordinator.state.collectAsStateWithLifecycle()
                 val offlineDemState by OfflineDemPackManager.uiState.collectAsStateWithLifecycle()
                 val liveSyncState by workspaceStateViewModel.liveSyncRepository.uiState.collectAsStateWithLifecycle()
+                val bleSyncState by workspaceStateViewModel.bleRepository.uiState.collectAsStateWithLifecycle()
 
                 val context = LocalContext.current
                 var hasRequestedLocationOnLaunch by rememberSaveable { mutableStateOf(false) }
@@ -157,6 +163,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 LaunchedEffect(Unit) {
+                    workspaceStateViewModel.bleRepository.attemptLaunchAutoConnectIfPermitted()
                     if (DeviceLocationResolver.hasAnyLocationPermission(context)) {
                         viewModel.resolveStartupZoomTarget(permissionGranted = true)
                     } else if (!hasRequestedLocationOnLaunch) {
@@ -468,6 +475,19 @@ class MainActivity : ComponentActivity() {
                         onConnect = { cfg -> workspaceStateViewModel.liveSyncRepository.connect(cfg) },
                         onDisconnect = workspaceStateViewModel.liveSyncRepository::disconnect,
                         onDismissError = workspaceStateViewModel.liveSyncRepository::dismissError
+                    ),
+                    bleSyncState = bleSyncState,
+                    bleSyncActions = BleSyncActions(
+                        onStartScan = workspaceStateViewModel.bleRepository::startScan,
+                        onStopScan = workspaceStateViewModel.bleRepository::stopScan,
+                        onConnectDevice = workspaceStateViewModel.bleRepository::connectToDevice,
+                        onReconnectSaved = workspaceStateViewModel.bleRepository::reconnectSavedRadio,
+                        onDisconnect = workspaceStateViewModel.bleRepository::disconnect,
+                        onForgetSaved = workspaceStateViewModel.bleRepository::forgetSavedRadio,
+                        onDismissError = workspaceStateViewModel.bleRepository::dismissError,
+                        onCenterOnMyRadio = {
+                            viewModel.centerOnMyRadio(bleSyncState.myNodeNum)
+                        }
                     ),
                     onSelectFadeMarginPreset = workspaceStateViewModel.environmentHolder::setFadeMarginPreset
                 )

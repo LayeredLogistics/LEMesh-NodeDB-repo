@@ -29,6 +29,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddLocationAlt
+import androidx.compose.material.icons.filled.BluetoothConnected
+import androidx.compose.material.icons.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudOff
@@ -64,7 +66,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import us.lemesh.nodedb.R
+import us.lemesh.nodedb.data.BleConnectionStatus
+import us.lemesh.nodedb.data.BleSyncUiState
 import us.lemesh.nodedb.data.LiveSyncStatus
+import us.lemesh.nodedb.data.LiveSyncTransport
 import us.lemesh.nodedb.ui.theme.JetBrainsMonoFontFamily
 import us.lemesh.nodedb.ui.theme.NodeDirectGreen
 import us.lemesh.nodedb.ui.theme.NodeMultiHopSky
@@ -95,6 +100,8 @@ internal fun UnifiedHorizonTopCard(
     isOfflineDownloading: Boolean = false,
     onOpenOfflineMaps: (() -> Unit)? = null,
     liveSyncStatus: LiveSyncStatus = LiveSyncStatus.OFFLINE,
+    liveSyncTransport: LiveSyncTransport = LiveSyncTransport.MQTT,
+    bleSyncState: BleSyncUiState = BleSyncUiState(),
     onOpenLiveSync: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
@@ -155,6 +162,8 @@ internal fun UnifiedHorizonTopCard(
                             isOfflineDownloading = isOfflineDownloading,
                             onOpenOfflineMaps = onOpenOfflineMaps,
                             liveSyncStatus = liveSyncStatus,
+                            liveSyncTransport = liveSyncTransport,
+                            bleSyncState = bleSyncState,
                             onOpenLiveSync = onOpenLiveSync
                         )
                     }
@@ -245,26 +254,52 @@ internal fun MergedHorizonStatusPill(
     onOpenOfflineMaps: (() -> Unit)?,
     liveSyncStatus: LiveSyncStatus,
     onOpenLiveSync: (() -> Unit)?,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    liveSyncTransport: LiveSyncTransport = LiveSyncTransport.MQTT,
+    bleSyncState: BleSyncUiState = BleSyncUiState()
 ) {
-    val syncAccent = when (liveSyncStatus) {
-        LiveSyncStatus.CONNECTED -> NodeDirectGreen
-        LiveSyncStatus.RECONNECTING -> NodeSelfAmber
-        LiveSyncStatus.OFFLINE -> TextSecondary
+    val bleIsConnected = bleSyncState.status == BleConnectionStatus.CONNECTED
+    val bleIsSyncing = bleSyncState.status == BleConnectionStatus.SYNCING ||
+        bleSyncState.status == BleConnectionStatus.CONNECTING
+    val bleIsReconnecting = bleSyncState.status == BleConnectionStatus.RECONNECTING
+    val bleHighlightActive = bleIsConnected || bleIsSyncing || bleIsReconnecting
+
+    val syncAccent = when {
+        bleIsConnected -> NodeDirectGreen
+        bleIsSyncing -> NodeMultiHopSky
+        bleIsReconnecting -> NodeSelfAmber
+        liveSyncStatus == LiveSyncStatus.CONNECTED -> NodeDirectGreen
+        liveSyncStatus == LiveSyncStatus.RECONNECTING -> NodeSelfAmber
+        else -> TextSecondary
     }
-    val syncLabel = when (liveSyncStatus) {
-        LiveSyncStatus.CONNECTED -> stringResource(R.string.live_sync_status_connected)
-        LiveSyncStatus.RECONNECTING -> stringResource(R.string.live_sync_status_reconnecting)
-        LiveSyncStatus.OFFLINE -> stringResource(R.string.live_sync_status_offline)
+    val syncLabel = when {
+        bleIsConnected -> {
+            val shortTag = bleSyncState.connectedShortName
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?: bleSyncState.connectedDeviceName?.trim()?.take(8)?.takeIf { it.isNotEmpty() }
+                ?: "Radio"
+            "BLE: $shortTag"
+        }
+        bleIsSyncing -> stringResource(R.string.ble_status_syncing)
+        bleIsReconnecting -> stringResource(R.string.ble_status_reconnecting)
+        liveSyncStatus == LiveSyncStatus.CONNECTED -> {
+            if (liveSyncTransport == LiveSyncTransport.MQTT) "MQTT"
+            else stringResource(R.string.live_sync_status_connected)
+        }
+        liveSyncStatus == LiveSyncStatus.RECONNECTING -> stringResource(R.string.live_sync_status_reconnecting)
+        else -> stringResource(R.string.live_sync_status_offline)
     }
+    val isSyncHighlighted = bleHighlightActive || liveSyncStatus != LiveSyncStatus.OFFLINE
     val offlineTint = when {
         isOfflineOnlyMode -> NodeSelfAmber
         isOfflineDownloading -> NodeDirectGreen
         else -> TextSecondary
     }
     val borderAccent = when {
-        liveSyncStatus == LiveSyncStatus.CONNECTED -> NodeDirectGreen.copy(alpha = 0.65f)
-        isOfflineOnlyMode || liveSyncStatus == LiveSyncStatus.RECONNECTING -> NodeSelfAmber.copy(alpha = 0.7f)
+        bleIsConnected || liveSyncStatus == LiveSyncStatus.CONNECTED -> NodeDirectGreen.copy(alpha = 0.65f)
+        bleIsSyncing -> NodeMultiHopSky.copy(alpha = 0.7f)
+        isOfflineOnlyMode || bleIsReconnecting || liveSyncStatus == LiveSyncStatus.RECONNECTING -> NodeSelfAmber.copy(alpha = 0.7f)
         isOfflineDownloading -> NodeDirectGreen.copy(alpha = 0.65f)
         else -> TacticalOutline
     }
@@ -321,7 +356,7 @@ internal fun MergedHorizonStatusPill(
                     modifier = Modifier
                         .heightIn(min = 38.dp)
                         .background(
-                            if (liveSyncStatus == LiveSyncStatus.OFFLINE) {
+                            if (!isSyncHighlighted) {
                                 TacticalSurfaceElevated.copy(alpha = 0f)
                             } else {
                                 syncAccent.copy(alpha = 0.16f)
@@ -330,24 +365,33 @@ internal fun MergedHorizonStatusPill(
                         .clickable(onClick = onOpenLiveSync)
                         .padding(horizontal = 8.dp, vertical = 7.dp)
                         .semantics {
-                            contentDescription = "Live telemetry sync: $syncLabel"
+                            contentDescription = "Radio and telemetry sync: $syncLabel"
                         }
                         .testTag("live_sync_toolbar_badge"),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(6.dp)
-                            .clip(CircleShape)
-                            .background(syncAccent)
-                    )
+                    if (bleHighlightActive) {
+                        Icon(
+                            imageVector = if (bleIsConnected) Icons.Default.BluetoothConnected else Icons.Default.BluetoothSearching,
+                            contentDescription = null,
+                            tint = syncAccent,
+                            modifier = Modifier.size(13.dp)
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(syncAccent)
+                        )
+                    }
                     Text(
                         text = syncLabel,
                         fontFamily = JetBrainsMonoFontFamily,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
-                        color = if (liveSyncStatus == LiveSyncStatus.OFFLINE) TextPrimary else syncAccent,
+                        color = if (!isSyncHighlighted) TextPrimary else syncAccent,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )

@@ -12,8 +12,8 @@ android {
     applicationId = "com.lemesh.nodedbmap"
     minSdk = 26
     targetSdk = 36
-    versionCode = 18
-    versionName = "18.0"
+    versionCode = 19
+    versionName = "19.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -90,6 +90,7 @@ dependencies {
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
   implementation(libs.osmdroid.android)
+  implementation(libs.meshtastic.protobufs)
   testImplementation(libs.androidx.compose.ui.test.junit4)
   testImplementation(libs.androidx.core)
   testImplementation(libs.androidx.junit)

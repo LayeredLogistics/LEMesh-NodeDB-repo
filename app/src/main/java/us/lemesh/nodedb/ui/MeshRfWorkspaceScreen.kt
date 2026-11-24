@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import org.osmdroid.views.MapView
 import us.lemesh.nodedb.R
 import us.lemesh.nodedb.data.AlignmentTarget
+import us.lemesh.nodedb.data.BleSyncUiState
 import us.lemesh.nodedb.data.FadeMarginPreset
 import us.lemesh.nodedb.data.LayerRenderMode
 import us.lemesh.nodedb.data.LiveSyncConfig
@@ -279,6 +280,8 @@ fun MeshRfWorkspaceScreen(
     offlineActions: OfflineMapsActions = OfflineMapsActions(),
     liveSyncState: LiveSyncUiState = LiveSyncUiState(),
     liveSyncActions: LiveSyncActions = LiveSyncActions(),
+    bleSyncState: BleSyncUiState = BleSyncUiState(),
+    bleSyncActions: BleSyncActions = BleSyncActions(),
     onSelectFadeMarginPreset: (FadeMarginPreset) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -681,6 +684,8 @@ fun MeshRfWorkspaceScreen(
                         offlineDemState = offlineDemState,
                         onOpenOfflineMaps = { showOfflineMapsDialog = true },
                         liveSyncStatus = liveSyncState.status,
+                        liveSyncTransport = liveSyncState.config.transport,
+                        bleSyncState = bleSyncState,
                         onOpenLiveSync = { showLiveSyncSheet = true },
                         modifier = Modifier.align(Alignment.TopCenter)
                     )
@@ -1053,13 +1058,21 @@ fun MeshRfWorkspaceScreen(
                     }
 
                     if (showLiveSyncSheet) {
+                        val myRadioNode = remember(bleSyncState.myNodeNum, meshState.allNodes, meshState.selfNode) {
+                            bleSyncState.myNodeNum?.let { num ->
+                                meshState.allNodes.firstOrNull { it.num == num }
+                            } ?: meshState.selfNode
+                        }
                         LiveSyncBottomSheet(
                             uiState = liveSyncState,
                             onUpdateConfig = liveSyncActions.onUpdateConfig,
                             onConnect = liveSyncActions.onConnect,
                             onDisconnect = liveSyncActions.onDisconnect,
                             onDismissError = liveSyncActions.onDismissError,
-                            onDismiss = { showLiveSyncSheet = false }
+                            onDismiss = { showLiveSyncSheet = false },
+                            bleState = bleSyncState,
+                            bleActions = bleSyncActions,
+                            myRadioNode = myRadioNode
                         )
                     }
                 }

@@ -64,10 +64,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import us.lemesh.nodedb.R
+import us.lemesh.nodedb.data.BleSyncUiState
 import us.lemesh.nodedb.data.LiveSyncConfig
 import us.lemesh.nodedb.data.LiveSyncStatus
 import us.lemesh.nodedb.data.LiveSyncTransport
 import us.lemesh.nodedb.data.LiveSyncUiState
+import us.lemesh.nodedb.data.MeshNode
 import us.lemesh.nodedb.ui.theme.AlertErrorRed
 import us.lemesh.nodedb.ui.theme.JetBrainsMonoFontFamily
 import us.lemesh.nodedb.ui.theme.NodeDirectGreen
@@ -154,6 +156,12 @@ fun LiveSyncToolbarBadge(
     }
 }
 
+enum class SyncSheetTab(val label: String) {
+    BLUETOOTH("Bluetooth"),
+    MQTT("MQTT"),
+    LOCAL_JSON("Local JSON")
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LiveSyncBottomSheet(
@@ -162,10 +170,19 @@ fun LiveSyncBottomSheet(
     onConnect: (LiveSyncConfig) -> Unit,
     onDisconnect: () -> Unit,
     onDismissError: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    bleState: BleSyncUiState = BleSyncUiState(),
+    bleActions: BleSyncActions = BleSyncActions(),
+    myRadioNode: MeshNode? = null,
+    initialTab: SyncSheetTab = if (uiState.status != LiveSyncStatus.OFFLINE && !bleState.isActiveOrConnected) {
+        if (uiState.config.transport == LiveSyncTransport.LOCAL_JSON) SyncSheetTab.LOCAL_JSON else SyncSheetTab.MQTT
+    } else {
+        SyncSheetTab.BLUETOOTH
+    }
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
+    var selectedTab by remember { mutableStateOf(initialTab) }
     var transport by remember(uiState.config) { mutableStateOf(uiState.config.transport) }
     var mqttHost by remember(uiState.config) { mutableStateOf(uiState.config.mqttHost) }
     var mqttPortText by remember(uiState.config) { mutableStateOf(uiState.config.mqttPort.toString()) }
@@ -241,128 +258,153 @@ fun LiveSyncBottomSheet(
                 }
             }
 
-            // Status summary & one-tap connect toggle
-            Surface(
-                color = TacticalSurfaceElevated,
-                shape = RoundedCornerShape(14.dp),
-                border = BorderStroke(1.dp, statusAccent.copy(alpha = 0.65f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(9.dp)
-                                    .clip(CircleShape)
-                                    .background(statusAccent)
-                            )
-                            Text(
-                                text = uiState.status.label.uppercase(),
-                                fontFamily = JetBrainsMonoFontFamily,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
-                                color = statusAccent
-                            )
-                        }
-                        Text(
-                            text = uiState.config.toRedactedEndpointSummary(),
-                            fontFamily = JetBrainsMonoFontFamily,
-                            fontSize = 10.sp,
-                            color = TextSecondary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = "${uiState.packetsReceived} packets • ${uiState.nodesUpdatedCount} node updates",
-                            fontFamily = JetBrainsMonoFontFamily,
-                            fontSize = 10.sp,
-                            color = TextMuted
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        onClick = {
-                            if (uiState.status == LiveSyncStatus.OFFLINE) {
-                                onConnect(buildConfig())
-                            } else {
-                                onDisconnect()
-                            }
-                        },
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (uiState.status == LiveSyncStatus.OFFLINE) NodeDirectGreen else AlertErrorRed,
-                            contentColor = TacticalCanvas
-                        ),
-                        modifier = Modifier
-                            .heightIn(min = 48.dp)
-                            .testTag("live_sync_toggle_button")
-                    ) {
-                        Icon(
-                            imageVector = if (uiState.status == LiveSyncStatus.OFFLINE) Icons.Default.Link else Icons.Default.LinkOff,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = if (uiState.status == LiveSyncStatus.OFFLINE) {
-                                stringResource(R.string.live_sync_connect)
-                            } else {
-                                stringResource(R.string.live_sync_disconnect)
-                            },
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
-
-            if (uiState.lastError != null) {
-                RfFloatingErrorBanner(
-                    message = uiState.lastError,
-                    onDismiss = onDismissError
-                )
-            }
-
-            // Transport selector
+            // 3-tab transport selector: Bluetooth Radio | MQTT | Local JSON
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                LiveSyncTransport.entries.forEach { option ->
-                    val selected = transport == option
+                SyncSheetTab.entries.forEach { tab ->
+                    val selected = selectedTab == tab
+                    val tabAccent = if (tab == SyncSheetTab.BLUETOOTH) NodeDirectGreen else NodeMultiHopSky
                     FilterChip(
                         selected = selected,
-                        onClick = { transport = option },
+                        onClick = {
+                            selectedTab = tab
+                            when (tab) {
+                                SyncSheetTab.MQTT -> transport = LiveSyncTransport.MQTT
+                                SyncSheetTab.LOCAL_JSON -> transport = LiveSyncTransport.LOCAL_JSON
+                                SyncSheetTab.BLUETOOTH -> Unit
+                            }
+                        },
                         label = {
                             Text(
-                                text = option.label,
-                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+                                text = tab.label,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                fontSize = 12.sp
                             )
                         },
                         colors = FilterChipDefaults.filterChipColors(
                             containerColor = TacticalSurfaceElevated,
                             labelColor = TextSecondary,
-                            selectedContainerColor = NodeMultiHopSky.copy(alpha = 0.22f),
-                            selectedLabelColor = NodeMultiHopSky
+                            selectedContainerColor = tabAccent.copy(alpha = 0.22f),
+                            selectedLabelColor = tabAccent
                         ),
                         modifier = Modifier
                             .weight(1f)
-                            .testTag("live_sync_transport_${option.name.lowercase()}")
+                            .testTag(
+                                when (tab) {
+                                    SyncSheetTab.BLUETOOTH -> "live_sync_transport_bluetooth"
+                                    SyncSheetTab.MQTT -> "live_sync_transport_mqtt"
+                                    SyncSheetTab.LOCAL_JSON -> "live_sync_transport_local_json"
+                                }
+                            )
                     )
                 }
             }
+
+            if (selectedTab == SyncSheetTab.BLUETOOTH) {
+                BleRadioSyncSection(
+                    bleState = bleState,
+                    myRadioNode = myRadioNode,
+                    actions = bleActions,
+                    onCenterDone = onDismiss
+                )
+            } else {
+                // Status summary & one-tap connect toggle for MQTT / Local JSON
+                Surface(
+                    color = TacticalSurfaceElevated,
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, statusAccent.copy(alpha = 0.65f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(9.dp)
+                                        .clip(CircleShape)
+                                        .background(statusAccent)
+                                )
+                                Text(
+                                    text = uiState.status.label.uppercase(),
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    color = statusAccent
+                                )
+                            }
+                            Text(
+                                text = uiState.config.toRedactedEndpointSummary(),
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 10.sp,
+                                color = TextSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = "${uiState.packetsReceived} packets • ${uiState.nodesUpdatedCount} node updates",
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontSize = 10.sp,
+                                color = TextMuted
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                if (uiState.status == LiveSyncStatus.OFFLINE) {
+                                    onConnect(buildConfig())
+                                } else {
+                                    onDisconnect()
+                                }
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (uiState.status == LiveSyncStatus.OFFLINE) NodeDirectGreen else AlertErrorRed,
+                                contentColor = TacticalCanvas
+                            ),
+                            modifier = Modifier
+                                .heightIn(min = 48.dp)
+                                .testTag("live_sync_toggle_button")
+                        ) {
+                            Icon(
+                                imageVector = if (uiState.status == LiveSyncStatus.OFFLINE) Icons.Default.Link else Icons.Default.LinkOff,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (uiState.status == LiveSyncStatus.OFFLINE) {
+                                    stringResource(R.string.live_sync_connect)
+                                } else {
+                                    stringResource(R.string.live_sync_disconnect)
+                                },
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
+                if (uiState.lastError != null) {
+                    RfFloatingErrorBanner(
+                        message = uiState.lastError,
+                        onDismiss = onDismissError
+                    )
+                }
 
             val fieldColors = OutlinedTextFieldDefaults.colors(
                 focusedContainerColor = TacticalSurfaceElevated,
@@ -524,39 +566,40 @@ fun LiveSyncBottomSheet(
                 color = TextMuted
             )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                OutlinedButton(
-                    onClick = { onUpdateConfig(buildConfig()) },
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 48.dp)
-                        .testTag("live_sync_save_button")
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Text(
-                        text = stringResource(R.string.live_sync_save_apply),
-                        color = TextPrimary
-                    )
-                }
-                Button(
-                    onClick = { onConnect(buildConfig()) },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = NodeMultiHopSky,
-                        contentColor = TacticalCanvas
-                    ),
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 48.dp)
-                        .testTag("live_sync_save_and_connect_button")
-                ) {
-                    Text(
-                        text = "Save & Connect",
-                        fontWeight = FontWeight.Bold
-                    )
+                    OutlinedButton(
+                        onClick = { onUpdateConfig(buildConfig()) },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp)
+                            .testTag("live_sync_save_button")
+                    ) {
+                        Text(
+                            text = stringResource(R.string.live_sync_save_apply),
+                            color = TextPrimary
+                        )
+                    }
+                    Button(
+                        onClick = { onConnect(buildConfig()) },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = NodeMultiHopSky,
+                            contentColor = TacticalCanvas
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp)
+                            .testTag("live_sync_save_and_connect_button")
+                    ) {
+                        Text(
+                            text = "Save & Connect",
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }

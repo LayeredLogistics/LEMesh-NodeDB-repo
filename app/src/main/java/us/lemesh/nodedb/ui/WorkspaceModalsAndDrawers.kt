@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import org.osmdroid.views.MapView
 import us.lemesh.nodedb.R
+import us.lemesh.nodedb.data.BleSyncUiState
 import us.lemesh.nodedb.data.BridgeObstructionItem
 import us.lemesh.nodedb.data.BridgeProfileMode
 import us.lemesh.nodedb.data.BridgeProfileSample
@@ -60,6 +61,7 @@ import us.lemesh.nodedb.data.GeoJsonReportExporter
 import us.lemesh.nodedb.data.LayerRenderMode
 import us.lemesh.nodedb.data.LidarViewshedEngine
 import us.lemesh.nodedb.data.LiveSyncStatus
+import us.lemesh.nodedb.data.LiveSyncTransport
 import us.lemesh.nodedb.data.MapExportEngine
 import us.lemesh.nodedb.data.MeshNode
 import us.lemesh.nodedb.data.OfflineDemPreset
@@ -116,6 +118,8 @@ internal fun WorkspaceTopFloatingOverlay(
     offlineDemState: OfflineDemUiState = OfflineDemUiState(),
     onOpenOfflineMaps: (() -> Unit)? = null,
     liveSyncStatus: LiveSyncStatus = LiveSyncStatus.OFFLINE,
+    liveSyncTransport: LiveSyncTransport = LiveSyncTransport.MQTT,
+    bleSyncState: BleSyncUiState = BleSyncUiState(),
     onOpenLiveSync: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -158,6 +162,8 @@ internal fun WorkspaceTopFloatingOverlay(
             isOfflineDownloading = offlineDemState.activeDownload != null,
             onOpenOfflineMaps = onOpenOfflineMaps,
             liveSyncStatus = liveSyncStatus,
+            liveSyncTransport = liveSyncTransport,
+            bleSyncState = bleSyncState,
             onOpenLiveSync = onOpenLiveSync
         ) {
             when (activeMode) {

@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import us.lemesh.nodedb.data.DeviceMetrics
 import us.lemesh.nodedb.data.DirectRfLink
+import us.lemesh.nodedb.data.EnvironmentMetrics
 import us.lemesh.nodedb.data.LinkDiagnosticSummary
 import us.lemesh.nodedb.data.LiveTelemetryUpdate
 import us.lemesh.nodedb.data.LosAnalysisResult
@@ -185,6 +186,15 @@ data class NodeInventoryState(
 
             for (upd in updates) {
                 val key = upd.stableKey ?: continue
+                if (upd.isSelf == true) {
+                    for (i in mutable.indices) {
+                        if (mutable[i].isSelf && mutable[i].stableKey != key &&
+                            (upd.nodeNum == null || mutable[i].num != upd.nodeNum)
+                        ) {
+                            mutable[i] = mutable[i].copy(isSelf = false)
+                        }
+                    }
+                }
                 val existingIdx = indexByKey[key] ?: upd.nodeNum?.let { indexByNum[it] }
                 if (existingIdx != null) {
                     val old = mutable[existingIdx]
@@ -203,6 +213,18 @@ data class NodeInventoryState(
                         )
                     } else {
                         old.deviceMetrics
+                    }
+                    val hasEnvMetricUpdate = upd.temperature != null ||
+                        upd.relativeHumidity != null ||
+                        upd.barometricPressure != null
+                    val mergedEnvMetrics = if (hasEnvMetricUpdate) {
+                        EnvironmentMetrics(
+                            temperature = upd.temperature ?: old.environmentMetrics?.temperature,
+                            relativeHumidity = upd.relativeHumidity ?: old.environmentMetrics?.relativeHumidity,
+                            barometricPressure = upd.barometricPressure ?: old.environmentMetrics?.barometricPressure
+                        )
+                    } else {
+                        old.environmentMetrics
                     }
                     val mergedNeighbors = if (!upd.neighborLinks.isNullOrEmpty()) {
                         val byKey = LinkedHashMap<String, us.lemesh.nodedb.data.NeighborLinkTelemetry>()
@@ -233,8 +255,10 @@ data class NodeInventoryState(
                         rssi = upd.rssi ?: old.rssi,
                         hopsAway = upd.hopsAway ?: old.hopsAway,
                         viaMqtt = upd.viaMqtt ?: old.viaMqtt,
+                        isSelf = upd.isSelf ?: old.isSelf,
                         lastHeard = maxOf(old.lastHeard ?: 0L, upd.lastHeard ?: 0L).takeIf { it > 0L },
                         deviceMetrics = mergedMetrics,
+                        environmentMetrics = mergedEnvMetrics,
                         neighborLinks = mergedNeighbors
                     )
                     mutable[existingIdx] = updated
@@ -261,6 +285,18 @@ data class NodeInventoryState(
                     } else {
                         null
                     }
+                    val envMetrics = if (upd.temperature != null ||
+                        upd.relativeHumidity != null ||
+                        upd.barometricPressure != null
+                    ) {
+                        EnvironmentMetrics(
+                            temperature = upd.temperature,
+                            relativeHumidity = upd.relativeHumidity,
+                            barometricPressure = upd.barometricPressure
+                        )
+                    } else {
+                        null
+                    }
                     val created = MeshNode(
                         num = upd.nodeNum,
                         id = cleanId,
@@ -274,12 +310,12 @@ data class NodeInventoryState(
                         hopsAway = upd.hopsAway,
                         viaMqtt = upd.viaMqtt ?: true,
                         isFavorite = false,
-                        isSelf = false,
+                        isSelf = upd.isSelf ?: false,
                         snr = upd.snr,
                         rssi = upd.rssi,
                         lastHeard = upd.lastHeard,
                         deviceMetrics = metrics,
-                        environmentMetrics = null,
+                        environmentMetrics = envMetrics,
                         rawJson = upd.rawJson ?: "{}",
                         neighborLinks = upd.neighborLinks.orEmpty()
                     )

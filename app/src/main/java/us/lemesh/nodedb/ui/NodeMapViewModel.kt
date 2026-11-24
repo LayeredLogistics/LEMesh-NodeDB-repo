@@ -24,6 +24,7 @@ import us.lemesh.nodedb.data.LosElevationSource
 import us.lemesh.nodedb.data.LosEndpoint
 import us.lemesh.nodedb.data.MeshGeoUtils
 import us.lemesh.nodedb.data.MeshNode
+import us.lemesh.nodedb.data.MeshtasticBleRepository
 import us.lemesh.nodedb.data.NodeColorPalette
 import us.lemesh.nodedb.data.NodeDbParseResult
 import us.lemesh.nodedb.data.NodeDbParser
@@ -259,7 +260,8 @@ class NodeMapViewModel @JvmOverloads constructor(
     val inventoryHolder: NodeInventoryStateHolder = NodeInventoryStateHolder(),
     val coordinator: RfWorkspaceCoordinator = RfWorkspaceCoordinator(),
     val environmentHolder: RfEnvironmentStateHolder = RfEnvironmentStateHolder(),
-    private val liveSyncRepository: LiveMeshSyncRepository? = null
+    private val liveSyncRepository: LiveMeshSyncRepository? = null,
+    private val bleRepository: MeshtasticBleRepository? = null
 ) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow(NodeMapUiState())
@@ -384,7 +386,29 @@ class NodeMapViewModel @JvmOverloads constructor(
                 }
             }
         }
+        bleRepository?.let { repo ->
+            viewModelScope.launch {
+                repo.incomingUpdates.collect { batch ->
+                    applyLiveTelemetryUpdates(batch)
+                }
+            }
+        }
         initialCacheRestoreJob = restoreCachedNodeDb()
+    }
+
+    fun centerOnMyRadio(myNodeNum: Long? = null): Boolean {
+        val state = _uiState.value
+        val target = (if (myNodeNum != null) {
+            state.allNodes.firstOrNull { it.num == myNodeNum && it.hasValidGps }
+        } else {
+            null
+        }) ?: state.selfNode?.takeIf { it.hasValidGps } ?: return false
+        viewportHolder.requestCenterFocus(
+            lat = target.latitude!!,
+            lon = target.longitude!!,
+            minZoom = 15.0
+        )
+        return true
     }
 
     fun setFadeMarginPreset(preset: FadeMarginPreset) {
