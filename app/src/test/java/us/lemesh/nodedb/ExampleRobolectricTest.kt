@@ -46,8 +46,9 @@ class ExampleRobolectricTest {
     @Test
     fun `read app name from context`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val appName = context.getString(R.string.app_name)
-        assertEquals("LEMesh NodeDB Map", appName)
+        assertEquals("MeshHorizon", context.getString(R.string.app_name))
+        assertEquals("LEMesh Horizon", context.getString(R.string.app_full_title))
+        assertEquals("915 MHz Viewshed & Relay Planner", context.getString(R.string.app_subtitle))
     }
 
     @Test

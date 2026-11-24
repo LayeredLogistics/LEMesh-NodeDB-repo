@@ -1,26 +1,27 @@
-# LEMesh NodeDB Map
+# LEMesh Horizon
 
-**Lake Effect Mesh ([lemesh.us](https://lemesh.us))** — Android Kotlin & Jetpack Compose tool for **915 MHz LoRa RF propagation, terrain viewsheds, Fresnel line-of-sight profiling, and 2-node relay bridge planning** built around Meshtastic NodeDB exports.
+**Lake Effect Mesh ([lemesh.us](https://lemesh.us))** — Android Kotlin & Jetpack Compose **915 MHz Viewshed & Relay Planner** (installed launcher label: **MeshHorizon**) for LoRa RF propagation, terrain viewsheds, Fresnel line-of-sight profiling, observed-vs-predicted link diagnostics, and 2-node relay bridge planning built around Meshtastic NodeDB exports and live telemetry feeds.
 
 ---
 
 ## Core Features
 
-- **NodeDB Map Visualization**
+- **NodeDB Map Visualization & Live Telemetry Sync**
   - Opens Meshtastic NodeDB `.json` / `.geojson` exports via file picker or Android **Share / Open With** (`ACTION_VIEW` & `ACTION_SEND`) with an interactive **Merge into Current DB** vs **Replace DB** prompt.
-  - Color-codes nodes by RF classification (Self, Favorite, Direct 0-Hop RF, Multi-Hop RF, MQTT) or per-node custom color overrides.
+  - Supports optional live MQTT v3.1.1 and local JSON telemetry sync that updates node positions, battery, and neighbor SNR without overwriting manual nodes or custom site notes.
+  - Color-codes nodes by RF classification (Self, Favorite, Direct 0-Hop RF, Multi-Hop RF, MQTT) or per-node custom color overrides, plus Observed vs. Predicted RF link diagnostic tiers.
   - Supports **Add Node Mode** (tap map, use map center, or manual coordinate/spec entry), full node spec/notes editing (`CustomNodeStore`), search, RF sightlines, and No-GPS node inspection.
-- **AWS Terrarium DEM Viewsheds & Aggregate RF Heatmaps**
-  - Computes terrain-aware radial viewsheds and multi-node aggregate RSSI heatmaps using AWS Mapzen Terrarium DEM elevation tiles with crisp high-zoom overlay rendering and saved/tinted viewshed layers.
+- **AWS Terrarium DEM Viewsheds, Offline Regional Packs & Aggregate RF Heatmaps**
+  - Computes terrain-aware radial viewsheds and multi-node aggregate RSSI heatmaps using a shared decoded AWS Mapzen Terrarium DEM tile pool with offline regional DEM packs and crisp high-zoom overlay rendering.
 - **915 MHz Fresnel & Knife-Edge Diffraction Line-of-Sight (LoS)**
-  - Evaluates 100% and 60% first Fresnel zone (`F1`) clearances, 4/3 effective Earth curvature bulge, knife-edge diffraction loss, predicted RSSI, link margin, and exact mast height remediation across point-to-point paths or active RF sightlines (Terrarium DEM first with Open-Meteo fallback).
-- **Bidirectional Link Budgets & 2-Node Relay Bridge Finder**
-  - Models independent TX, RX, and Relay transmit power (default `22 dBm`), antenna gain (default `3.0 dBi`), receiver sensitivity (`-130 dBm`), and mast heights (`AGL`).
-  - Solves forward and reverse terrain viewsheds to locate mutual overlap zones, rank candidate relay sites, and inspect composite terrain elevation profiles (`TX -> Relay -> RX`).
-- **Map & Backup Exports**
-  - **KML (`.kml`)**: Color-coded placemarks, node specs, notes, RF sightlines, Fresnel paths, and viewshed boundaries ready for Google My Maps and Google Earth.
+  - Evaluates 100% and 60% first Fresnel zone (`F1`) clearances, 4/3 effective Earth curvature bulge, knife-edge diffraction loss, global seasonal clutter / storm fade margins (`0 dB` Winter, `+6 dB` Canopy, `+12 dB` Lake-Effect Squall), predicted RSSI, link margin, and exact mast height remediation.
+- **Bidirectional Link Budgets, 2-Node Relay Bridge Finder & Antenna Alignment HUD**
+  - Models independent TX, RX, and Relay transmit power (default `22 dBm`), antenna gain (default `3.0 dBi`), receiver sensitivity (`-130 dBm`), and mast heights (`AGL`), with two-stage coarse-to-fine relay candidate search and a real-time True-North Antenna Alignment Compass HUD.
+- **Field & Outreach Exports**
+  - **Host Outreach Spec Card (`.png`)**: Branded `LEMesh Horizon • lemesh.us` property-owner coverage cards that omit personal handheld nodes, mask portable sites (~1 km), and never embed property photos.
+  - **KML (`.kml`)**: Color-coded `LEMesh Horizon • lemesh.us` placemarks, node specs, notes, RF sightlines, Fresnel paths, and viewshed boundaries ready for Google My Maps and Google Earth.
   - **NodeDB JSON Backup (`.json`)**: Full Meshtastic-compatible backup preserving manual nodes, edited specs, notes, and custom color overrides.
-  - **GeoJSON (`.geojson`)** & **Annotated 2× PNG** map snapshots.
+  - **GeoJSON (`.geojson`)** & **Annotated 2× PNG** map snapshots with watermarked Lake Effect Mesh emblem branding.
 
 ---
 

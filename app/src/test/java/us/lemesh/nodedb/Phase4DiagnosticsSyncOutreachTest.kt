@@ -5,7 +5,9 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
@@ -46,10 +48,17 @@ import us.lemesh.nodedb.data.TerrariumDemRepository
 import us.lemesh.nodedb.data.TerrariumTileGrid
 import us.lemesh.nodedb.data.ViewshedEngine
 import us.lemesh.nodedb.data.ViewshedParams
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertCountEquals
 import us.lemesh.nodedb.ui.AntennaAlignmentHudOverlay
-import us.lemesh.nodedb.ui.CompactNodeMapSearchBar
 import us.lemesh.nodedb.ui.LiveSyncToolbarBadge
+import us.lemesh.nodedb.ui.NodeMapUiState
 import us.lemesh.nodedb.ui.PropagationFadeMarginStrip
+import us.lemesh.nodedb.ui.UnifiedHorizonTopCard
+import us.lemesh.nodedb.ui.UnifiedMeshTopCardBody
 import us.lemesh.nodedb.ui.state.NodeInventoryState
 import us.lemesh.nodedb.ui.theme.LEMeshTheme
 import java.io.ByteArrayInputStream
@@ -586,18 +595,70 @@ class Phase4DiagnosticsSyncOutreachTest {
         dummyMap.recycle()
         emblem.recycle()
 
+        val kml = MapExportEngine.buildNodeMapKml(
+            uiState = NodeMapUiState(loadedFileName = "erie_mesh.json")
+        )
+        assertTrue(kml.contains("<name>LEMesh Horizon • lemesh.us — erie_mesh.json</name>"))
+        assertTrue(kml.contains("Exported from LEMesh Horizon • lemesh.us"))
+
+        var offlineClicked = false
+        var liveSyncClicked = false
         composeRule.setContent {
             LEMeshTheme {
-                CompactNodeMapSearchBar(
-                    searchQuery = "",
-                    activeFilterCount = 0,
+                var expanded by remember { mutableStateOf(true) }
+                UnifiedHorizonTopCard(
+                    expanded = expanded,
+                    onToggleExpanded = { expanded = !expanded },
                     savedLayersActiveCount = 0,
-                    onSearchQueryChange = {},
-                    onOpenFilters = {},
-                    onOpenLayers = {}
-                )
+                    onOpenLayers = {},
+                    onOpenOfflineMaps = { offlineClicked = true },
+                    liveSyncStatus = LiveSyncStatus.OFFLINE,
+                    onOpenLiveSync = { liveSyncClicked = true }
+                ) {
+                    UnifiedMeshTopCardBody(
+                        searchQuery = "",
+                        activeFilterCount = 0,
+                        onSearchQueryChange = {},
+                        onOpenFilters = {},
+                        showStandbyActions = true,
+                        showAddNodeButton = true,
+                        onLoadJsonClick = {},
+                        onToggleAddNodeMode = {},
+                        hasFilteredSubset = false,
+                        filteredCount = 0,
+                        plottedGpsCount = 0,
+                        onResetFilters = {}
+                    )
+                }
             }
         }
+        composeRule.onNodeWithTag("unified_horizon_top_card").assertIsDisplayed()
+        composeRule.onNodeWithTag("horizon_brand_pill").assertIsDisplayed()
+        composeRule.onNodeWithText("LEMesh Horizon").assertIsDisplayed()
+        composeRule.onAllNodesWithTag("toolbar_lemesh_emblem").assertCountEquals(1)
         composeRule.onNodeWithTag("toolbar_lemesh_emblem").assertIsDisplayed()
+        composeRule.onNodeWithTag("merged_status_pill").assertIsDisplayed()
+        composeRule.onNodeWithTag("offline_maps_toolbar_button").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("live_sync_toolbar_badge").assertIsDisplayed().performClick()
+        assertTrue(offlineClicked)
+        assertTrue(liveSyncClicked)
+
+        composeRule.onNodeWithTag("map_search_input").assertIsDisplayed()
+        composeRule.onNodeWithTag("map_filters_button").assertIsDisplayed()
+        composeRule.onNodeWithTag("load_json_button").assertIsDisplayed()
+        composeRule.onNodeWithTag("standby_add_node_button").assertIsDisplayed()
+
+        // Collapse folds search & standby rows while preserving brand header
+        composeRule.onNodeWithTag("top_card_collapse_toggle").assertIsDisplayed().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("LEMesh Horizon").assertIsDisplayed()
+        composeRule.onNodeWithTag("map_search_input").assertDoesNotExist()
+        composeRule.onNodeWithTag("load_json_button").assertDoesNotExist()
+
+        // Expand restores search & standby rows
+        composeRule.onNodeWithTag("top_card_collapse_toggle").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("map_search_input").assertIsDisplayed()
+        composeRule.onNodeWithTag("load_json_button").assertIsDisplayed()
     }
 }

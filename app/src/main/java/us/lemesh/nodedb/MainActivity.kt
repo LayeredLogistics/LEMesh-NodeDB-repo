@@ -30,6 +30,8 @@ import us.lemesh.nodedb.data.RfEnvironmentStateHolder
 import us.lemesh.nodedb.ui.BridgeModeActions
 import us.lemesh.nodedb.ui.BridgePlacementTarget
 import us.lemesh.nodedb.ui.BridgeViewModel
+import us.lemesh.nodedb.ui.LidarStreetModeActions
+import us.lemesh.nodedb.ui.LidarStreetViewModel
 import us.lemesh.nodedb.ui.LiveSyncActions
 import us.lemesh.nodedb.ui.MeshModeActions
 import us.lemesh.nodedb.ui.MeshRfWorkspaceScreen
@@ -105,6 +107,20 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val lidarViewModel: LidarStreetViewModel by viewModels {
+        object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                return LidarStreetViewModel(
+                    application = application,
+                    viewportHolder = workspaceStateViewModel.viewportHolder,
+                    coordinator = workspaceStateViewModel.coordinator,
+                    environmentHolder = workspaceStateViewModel.environmentHolder
+                ) as T
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -123,6 +139,7 @@ class MainActivity : ComponentActivity() {
                 val uiState by viewModel.uiState.collectAsStateWithLifecycle()
                 val viewshedState by viewshedViewModel.uiState.collectAsStateWithLifecycle()
                 val bridgeState by bridgeViewModel.uiState.collectAsStateWithLifecycle()
+                val lidarState by lidarViewModel.uiState.collectAsStateWithLifecycle()
                 val viewportState by workspaceStateViewModel.viewportHolder.state.collectAsStateWithLifecycle()
                 val coordinatorState by workspaceStateViewModel.coordinator.state.collectAsStateWithLifecycle()
                 val offlineDemState by OfflineDemPackManager.uiState.collectAsStateWithLifecycle()
@@ -158,6 +175,7 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(uiState.selfNode, uiState.allNodes) {
                     viewshedViewModel.syncDefaultSiteFromSelfNodeIfUnset(uiState.selfNode)
                     bridgeViewModel.syncDefaultsFromNodesIfUnset(uiState.selfNode, uiState.allNodes)
+                    lidarViewModel.syncDefaultSiteFromSelfNodeIfUnset(uiState.selfNode)
                 }
 
                 val openDocumentLauncher = rememberLauncherForActivityResult(
@@ -165,6 +183,22 @@ class MainActivity : ComponentActivity() {
                 ) { uri: Uri? ->
                     if (uri != null) {
                         viewModel.loadFromUri(uri)
+                    }
+                }
+
+                val openLidarGridLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.OpenDocument()
+                ) { uri: Uri? ->
+                    if (uri != null) {
+                        lidarViewModel.importLocalLidarUri(uri)
+                    }
+                }
+
+                val exportLidarGeoTiffLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.CreateDocument("image/tiff")
+                ) { uri: Uri? ->
+                    if (uri != null) {
+                        lidarViewModel.exportActivePatchToGeoTiff(uri)
                     }
                 }
 
@@ -179,12 +213,29 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
+                val triggerLidarGridPicker = {
+                    openLidarGridLauncher.launch(
+                        arrayOf(
+                            "image/tiff",
+                            "image/x-tiff",
+                            "text/plain",
+                            "application/octet-stream",
+                            "*/*"
+                        )
+                    )
+                }
+
+                val triggerLidarGeoTiffExport = {
+                    exportLidarGeoTiffLauncher.launch(lidarViewModel.suggestedGeoTiffFileName())
+                }
+
                 MeshRfWorkspaceScreen(
                     activeMode = coordinatorState.activeMode,
                     viewportState = viewportState,
                     meshState = uiState,
                     viewshedState = viewshedState,
                     bridgeState = bridgeState,
+                    lidarState = lidarState,
                     onSwitchMode = workspaceStateViewModel.coordinator::switchMode,
                     onPinDragStart = workspaceStateViewModel.coordinator::onPinDragStarted,
                     meshActions = MeshModeActions(
@@ -285,6 +336,10 @@ class MainActivity : ComponentActivity() {
                                 autoSolveIfReady = true
                             )
                             viewModel.selectNode(null)
+                        },
+                        onAssignLidarFromNode = { node ->
+                            lidarViewModel.applyNodeHandoffAndCalculate(node)
+                            viewModel.selectNode(null)
                         }
                     ),
                     viewshedActions = ViewshedModeActions(
@@ -360,6 +415,30 @@ class MainActivity : ComponentActivity() {
                         onScrubProfileSample = bridgeViewModel::updateScrubbedProfileSample,
                         onRetryLiveProfile = bridgeViewModel::retryLiveProfile
                     ),
+                    lidarActions = LidarStreetModeActions(
+                        onMapTap = lidarViewModel::setTxMapTapCoordinate,
+                        onTxDragEnd = lidarViewModel::setTxDragCoordinate,
+                        onSelectTxNode = lidarViewModel::selectTxNode,
+                        onTxHeightSliderChange = lidarViewModel::updateTxHeightFromSlider,
+                        onTxHeightTextChange = lidarViewModel::updateTxHeightFromText,
+                        onRxHeightSliderChange = lidarViewModel::updateRxHeightFromSlider,
+                        onRxHeightTextChange = lidarViewModel::updateRxHeightFromText,
+                        onRadiusSliderChange = lidarViewModel::updateRadiusFromSlider,
+                        onRadiusTextChange = lidarViewModel::updateRadiusFromText,
+                        onFrequencyChange = lidarViewModel::updateFrequencyText,
+                        onTxPowerChange = lidarViewModel::updateTxPowerDbm,
+                        onAntennaGainChange = lidarViewModel::updateAntennaGainDbi,
+                        onCableLossChange = lidarViewModel::updateCableLossDb,
+                        onOpacityChange = lidarViewModel::updateOverlayOpacity,
+                        onCalculateViewshed = lidarViewModel::calculateViewshed,
+                        onImportLocalLidar = triggerLidarGridPicker,
+                        onExportGeoTiff = triggerLidarGeoTiffExport,
+                        onClearImportedLidar = lidarViewModel::clearImportedLocalPatch,
+                        onClearOverlay = lidarViewModel::clearOverlayOnly,
+                        onResetPins = lidarViewModel::resetPinsAndOverlay,
+                        onDismissExportStatus = lidarViewModel::dismissExportStatus,
+                        onDismissError = lidarViewModel::dismissError
+                    ),
                     offlineDemState = offlineDemState,
                     offlineActions = OfflineMapsActions(
                         onToggleOfflineOnly = { enabled ->
@@ -427,5 +506,6 @@ class MainActivity : ComponentActivity() {
         const val ROUTE_MAP = "map"
         const val ROUTE_VIEWSHED = "viewshed"
         const val ROUTE_BRIDGE = "bridge"
+        const val ROUTE_LIDAR_STREET = "lidar_street"
     }
 }

@@ -424,14 +424,15 @@ object MapSnapshotRenderer {
                 textAlign = Paint.Align.RIGHT
             }
 
-            val hasEmblem = emblemBitmap != null && !emblemBitmap.isRecycled
+            val activeEmblem = emblemBitmap?.takeIf { !it.isRecycled }
+            val hasEmblem = activeEmblem != null
             val emblemRadius = if (hasEmblem) (44f * s) else 0f
-            if (hasEmblem && emblemBitmap != null) {
+            if (activeEmblem != null) {
                 val emblemCx = padH + emblemRadius
                 val emblemCy = 6f * s + (headerHeight - 6f * s) / 2f
                 drawCircularEmblemBadge(
                     canvas = canvas,
-                    emblemBitmap = emblemBitmap,
+                    emblemBitmap = activeEmblem,
                     centerX = emblemCx,
                     centerY = emblemCy,
                     radius = emblemRadius,
@@ -448,7 +449,7 @@ object MapSnapshotRenderer {
             var y = 32f * s
             val timestampW = rightStampPaint.measureText(spec.timestampLabel) + 14f * s
             val brandLine = ellipsizeText(
-                "LAKE EFFECT MESH  •  LEMESH.US  •  HOST OUTREACH SPEC CARD",
+                "LEMESH HORIZON  •  LEMESH.US  •  HOST OUTREACH SPEC CARD",
                 brandPaint,
                 (maxContentW - timestampW).coerceAtLeast(80f)
             )
@@ -568,7 +569,7 @@ object MapSnapshotRenderer {
                 typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
             }
             canvas.drawText(
-                "Zero utility power draw • Non-penetrating weighted/clamp mount • Learn more at lemesh.us",
+                "${MapExportEngine.EXPORT_BRAND_ATTRIBUTION}  •  Zero utility power draw • Non-penetrating weighted/clamp mount",
                 padH,
                 totalHeight - 18f * s,
                 footBrandPaint

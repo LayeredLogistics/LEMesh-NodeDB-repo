@@ -187,7 +187,9 @@ fun ViewshedPlannerScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        // Slim single-card top placement strip
+        var isTopCardExpanded by rememberSaveable { mutableStateOf(true) }
+
+        // Unified collapsible top card
         Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -197,12 +199,13 @@ fun ViewshedPlannerScreen(
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Surface(
-                color = TacticalSurface.copy(alpha = 0.93f),
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, TacticalOutline, RoundedCornerShape(16.dp))
+            UnifiedHorizonTopCard(
+                expanded = isTopCardExpanded,
+                onToggleExpanded = { isTopCardExpanded = !isTopCardExpanded },
+                savedLayersActiveCount = enabledLayersCount,
+                layersTestTag = "viewshed_layers_button",
+                layersIconTintActive = true,
+                onOpenLayers = { showSavedLayersSheet = true }
             ) {
                 Column(
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -215,50 +218,7 @@ fun ViewshedPlannerScreen(
                         testTagPrefix = "viewshed",
                         onSelectMode = { onSetPlacementMode(it.toViewshedMode()) },
                         onDropAtCenter = { dropCenterRequestId++ },
-                        onSwapTxRx = onSwapTxRx,
-                        trailingContent = {
-                            Surface(
-                                onClick = { showSavedLayersSheet = true },
-                                color = if (enabledLayersCount > 0) NodeDirectGreen.copy(alpha = 0.16f) else TacticalSurfaceElevated,
-                                shape = RoundedCornerShape(10.dp),
-                                border = BorderStroke(
-                                    1.dp,
-                                    if (enabledLayersCount > 0) NodeDirectGreen.copy(alpha = 0.7f) else TacticalOutline
-                                ),
-                                modifier = Modifier
-                                    .minimumInteractiveComponentSize()
-                                    .testTag("viewshed_layers_button")
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Layers,
-                                        contentDescription = stringResource(R.string.saved_layers_title),
-                                        tint = if (enabledLayersCount > 0) NodeDirectGreen else NodeMultiHopSky,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    if (enabledLayersCount > 0) {
-                                        Box(
-                                            modifier = Modifier
-                                                .clip(CircleShape)
-                                                .background(NodeDirectGreen)
-                                                .padding(horizontal = 5.dp, vertical = 1.dp)
-                                        ) {
-                                            Text(
-                                                text = enabledLayersCount.toString(),
-                                                fontFamily = JetBrainsMonoFontFamily,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 10.sp,
-                                                color = TacticalCanvas
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        onSwapTxRx = onSwapTxRx
                     )
                     SiteCoordinatesStrip(uiState = uiState)
                 }

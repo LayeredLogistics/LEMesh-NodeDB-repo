@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import org.osmdroid.views.MapView
 import us.lemesh.nodedb.ui.BridgeUiState
+import us.lemesh.nodedb.ui.LidarStreetUiState
 import us.lemesh.nodedb.ui.MapBaseLayer
 import us.lemesh.nodedb.ui.NodeMapUiState
 import us.lemesh.nodedb.ui.ViewshedUiState
@@ -76,6 +77,8 @@ data class MapExportSummary(
  */
 object MapExportEngine {
 
+    const val EXPORT_BRAND_ATTRIBUTION = "LEMesh Horizon • lemesh.us"
+
     private val FILE_TS_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss", Locale.US)
         .withZone(ZoneId.systemDefault())
     private val DISPLAY_TS_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm z", Locale.US)
@@ -124,6 +127,12 @@ object MapExportEngine {
         exportedAtIso: String = formatIsoTimestamp()
     ): String = MapKmlExportBuilder.buildBridgeKml(uiState, baseLayerName, exportedAtIso)
 
+    fun buildLidarKml(
+        uiState: LidarStreetUiState,
+        baseLayerName: String = MapBaseLayer.DARK_MATTER.displayName,
+        exportedAtIso: String = formatIsoTimestamp()
+    ): String = MapKmlExportBuilder.buildLidarKml(uiState, baseLayerName, exportedAtIso)
+
     // -------------------------------------------------------------------------
     // RFC 7946 GeoJSON & Report Builders
     // -------------------------------------------------------------------------
@@ -145,6 +154,12 @@ object MapExportEngine {
         baseLayerName: String = MapBaseLayer.DARK_MATTER.displayName,
         exportedAtIso: String = formatIsoTimestamp()
     ): String = GeoJsonReportExporter.buildBridgeGeoJson(uiState, baseLayerName, exportedAtIso)
+
+    fun buildLidarGeoJson(
+        uiState: LidarStreetUiState,
+        baseLayerName: String = MapBaseLayer.DARK_MATTER.displayName,
+        exportedAtIso: String = formatIsoTimestamp()
+    ): String = GeoJsonReportExporter.buildLidarGeoJson(uiState, baseLayerName, exportedAtIso)
 
     fun buildLinkBudgetReportMarkdown(
         bridgeResult: BridgeResult,
@@ -174,6 +189,11 @@ object MapExportEngine {
         uiState: BridgeUiState,
         baseLayer: MapBaseLayer
     ): MapExportSummary = GeoJsonReportExporter.buildBridgeSummary(uiState, baseLayer)
+
+    fun buildLidarSummary(
+        uiState: LidarStreetUiState,
+        baseLayer: MapBaseLayer
+    ): MapExportSummary = GeoJsonReportExporter.buildLidarSummary(uiState, baseLayer)
 
     // -------------------------------------------------------------------------
     // Bounded Snapshot Capture & Delivery

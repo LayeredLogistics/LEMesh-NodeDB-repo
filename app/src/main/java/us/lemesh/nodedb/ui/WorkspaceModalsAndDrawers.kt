@@ -2,7 +2,6 @@ package us.lemesh.nodedb.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -19,22 +18,14 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AddLocationAlt
-import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.CloudOff
-import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -47,10 +38,10 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.testTag
@@ -67,6 +58,7 @@ import us.lemesh.nodedb.data.BridgeProfileSample
 import us.lemesh.nodedb.data.FadeMarginPreset
 import us.lemesh.nodedb.data.GeoJsonReportExporter
 import us.lemesh.nodedb.data.LayerRenderMode
+import us.lemesh.nodedb.data.LidarViewshedEngine
 import us.lemesh.nodedb.data.LiveSyncStatus
 import us.lemesh.nodedb.data.MapExportEngine
 import us.lemesh.nodedb.data.MeshNode
@@ -85,7 +77,6 @@ import us.lemesh.nodedb.ui.theme.NodeSelfAmber
 import us.lemesh.nodedb.ui.theme.TacticalCanvas
 import us.lemesh.nodedb.ui.theme.TacticalOutline
 import us.lemesh.nodedb.ui.theme.TacticalSurface
-import us.lemesh.nodedb.ui.theme.TacticalSurfaceElevated
 import us.lemesh.nodedb.ui.theme.TextPrimary
 import us.lemesh.nodedb.ui.theme.TextSecondary
 import kotlin.math.roundToInt
@@ -96,6 +87,7 @@ internal fun WorkspaceTopFloatingOverlay(
     meshState: NodeMapUiState,
     viewshedState: ViewshedUiState,
     bridgeState: BridgeUiState,
+    lidarState: LidarStreetUiState = LidarStreetUiState(),
     activeFilterCount: Int,
     layersBadgeCount: Int,
     hasFilteredSubset: Boolean,
@@ -119,12 +111,34 @@ internal fun WorkspaceTopFloatingOverlay(
     onSwapBridgeTxRx: () -> Unit,
     onDismissBridgeError: () -> Unit,
     onDismissBridgeObstructionCallout: () -> Unit,
+    onDropLidarAtCenter: () -> Unit = {},
+    onDismissLidarError: () -> Unit = {},
     offlineDemState: OfflineDemUiState = OfflineDemUiState(),
     onOpenOfflineMaps: (() -> Unit)? = null,
     liveSyncStatus: LiveSyncStatus = LiveSyncStatus.OFFLINE,
     onOpenLiveSync: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    var isTopCardExpanded by rememberSaveable { mutableStateOf(true) }
+    val viewshedEnabledLayersCount = viewshedState.savedLayers.count { it.isEnabled }
+    val headerLayersCount = when (activeMode) {
+        WorkspaceMode.MESH -> layersBadgeCount
+        WorkspaceMode.VIEWSHED -> viewshedEnabledLayersCount
+        WorkspaceMode.BRIDGE, WorkspaceMode.LIDAR_STREET -> 0
+    }
+    val headerLayersTestTag = when (activeMode) {
+        WorkspaceMode.VIEWSHED -> "viewshed_layers_button"
+        else -> "chip_saved_layers"
+    }
+    val headerLayersAction: (() -> Unit)? = when (activeMode) {
+        WorkspaceMode.MESH, WorkspaceMode.VIEWSHED -> onOpenLayers
+        WorkspaceMode.BRIDGE, WorkspaceMode.LIDAR_STREET -> null
+    }
+    val headerLayersTintActive = when (activeMode) {
+        WorkspaceMode.VIEWSHED -> true
+        else -> headerLayersCount > 0
+    }
+
     Column(
         modifier = modifier
             .widthIn(max = 640.dp)
@@ -133,102 +147,86 @@ internal fun WorkspaceTopFloatingOverlay(
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        when (activeMode) {
-            WorkspaceMode.MESH -> {
-                CompactNodeMapSearchBar(
-                    searchQuery = meshState.searchQuery,
-                    activeFilterCount = activeFilterCount,
-                    savedLayersActiveCount = layersBadgeCount,
-                    onSearchQueryChange = onSearchQueryChange,
-                    onOpenFilters = onOpenFilters,
-                    onOpenLayers = onOpenLayers,
-                    isOfflineOnlyMode = offlineDemState.isOfflineOnlyMode,
-                    isOfflineDownloading = offlineDemState.activeDownload != null,
-                    onOpenOfflineMaps = onOpenOfflineMaps
-                )
+        UnifiedHorizonTopCard(
+            expanded = isTopCardExpanded,
+            onToggleExpanded = { isTopCardExpanded = !isTopCardExpanded },
+            savedLayersActiveCount = headerLayersCount,
+            layersTestTag = headerLayersTestTag,
+            layersIconTintActive = headerLayersTintActive,
+            onOpenLayers = headerLayersAction,
+            isOfflineOnlyMode = offlineDemState.isOfflineOnlyMode,
+            isOfflineDownloading = offlineDemState.activeDownload != null,
+            onOpenOfflineMaps = onOpenOfflineMaps,
+            liveSyncStatus = liveSyncStatus,
+            onOpenLiveSync = onOpenLiveSync
+        ) {
+            when (activeMode) {
+                WorkspaceMode.MESH -> {
+                    UnifiedMeshTopCardBody(
+                        searchQuery = meshState.searchQuery,
+                        activeFilterCount = activeFilterCount,
+                        onSearchQueryChange = onSearchQueryChange,
+                        onOpenFilters = onOpenFilters,
+                        showStandbyActions = !meshState.hasLoadedFile && !meshState.isLoading,
+                        showAddNodeButton = !meshState.isAddNodeMode,
+                        onLoadJsonClick = onLoadJsonClick,
+                        onToggleAddNodeMode = onToggleAddNodeMode,
+                        hasFilteredSubset = hasFilteredSubset,
+                        filteredCount = meshState.filteredMapNodes.size,
+                        plottedGpsCount = meshState.plottedGpsCount,
+                        onResetFilters = onResetAllFilters
+                    )
+                }
 
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (onOpenLiveSync != null) {
-                        LiveSyncToolbarBadge(
-                            status = liveSyncStatus,
-                            onClick = onOpenLiveSync
+                WorkspaceMode.VIEWSHED -> {
+                    val isTxTarget = viewshedState.effectivePlacementTarget == ViewshedPlacementTarget.TX
+                    Column(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        RfQuickPlacementStrip(
+                            placementChoice = viewshedState.placementMode.toRfChoice(),
+                            isTxTarget = isTxTarget,
+                            hasSwappableEndpoints = viewshedState.hasTxSet || viewshedState.hasRxSet,
+                            testTagPrefix = "viewshed",
+                            onSelectMode = { onSetViewshedPlacementMode(it.toViewshedMode()) },
+                            onDropAtCenter = onDropViewshedAtCenter,
+                            onSwapTxRx = onSwapViewshedTxRx
                         )
-                    }
-                    if (!meshState.hasLoadedFile && !meshState.isLoading) {
-                        Button(
-                            onClick = onLoadJsonClick,
-                            shape = RoundedCornerShape(20.dp),
-                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = NodeDirectGreen,
-                                contentColor = TacticalCanvas
-                            ),
-                            modifier = Modifier
-                                .minimumInteractiveComponentSize()
-                                .testTag("load_json_button")
-                        ) {
-                            Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                text = stringResource(R.string.action_load_json),
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        if (!meshState.isAddNodeMode) {
-                            OutlinedButton(
-                                onClick = onToggleAddNodeMode,
-                                shape = RoundedCornerShape(20.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                                border = BorderStroke(1.dp, NodeMultiHopSky.copy(alpha = 0.7f)),
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    containerColor = TacticalSurface.copy(alpha = 0.92f),
-                                    contentColor = NodeMultiHopSky
-                                ),
-                                modifier = Modifier
-                                    .minimumInteractiveComponentSize()
-                                    .testTag("standby_add_node_button")
-                            ) {
-                                Icon(Icons.Default.AddLocationAlt, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text(
-                                    text = stringResource(R.string.action_add_node),
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
-                        }
-                    }
-
-                    if (hasFilteredSubset) {
-                        Surface(
-                            onClick = onResetAllFilters,
-                            color = TacticalSurface.copy(alpha = 0.92f),
-                            shape = RoundedCornerShape(18.dp),
-                            border = BorderStroke(1.dp, NodeMultiHopSky.copy(alpha = 0.5f)),
-                            modifier = Modifier.heightIn(min = 36.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Text(
-                                    text = "${meshState.filteredMapNodes.size}/${meshState.plottedGpsCount} GPS",
-                                    fontFamily = JetBrainsMonoFontFamily,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = NodeMultiHopSky
-                                )
-                                Text("• Reset", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
-                            }
-                        }
+                        SiteCoordinatesStrip(uiState = viewshedState)
                     }
                 }
 
+                WorkspaceMode.BRIDGE -> {
+                    val isTxTarget = bridgeState.effectivePlacementTarget == BridgePlacementTarget.TX
+                    Column(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        RfQuickPlacementStrip(
+                            placementChoice = bridgeState.placementMode.toRfChoice(),
+                            isTxTarget = isTxTarget,
+                            hasSwappableEndpoints = bridgeState.hasTxSet || bridgeState.hasRxSet,
+                            testTagPrefix = "bridge",
+                            onSelectMode = { onSetBridgePlacementMode(it.toBridgeMode()) },
+                            onDropAtCenter = onDropBridgeAtCenter,
+                            onSwapTxRx = onSwapBridgeTxRx
+                        )
+                        BridgeStatusLine(uiState = bridgeState)
+                    }
+                }
+
+                WorkspaceMode.LIDAR_STREET -> {
+                    UnifiedLidarTopCardBody(
+                        uiState = lidarState,
+                        onDropAtCenter = onDropLidarAtCenter
+                    )
+                }
+            }
+        }
+
+        when (activeMode) {
+            WorkspaceMode.MESH -> {
                 AnimatedVisibility(visible = meshState.isAggregateCoverageLoading) {
                     Surface(
                         color = TacticalSurface.copy(alpha = 0.94f),
@@ -300,98 +298,6 @@ internal fun WorkspaceTopFloatingOverlay(
             }
 
             WorkspaceMode.VIEWSHED -> {
-                val enabledLayersCount = viewshedState.savedLayers.count { it.isEnabled }
-                val isTxTarget = viewshedState.effectivePlacementTarget == ViewshedPlacementTarget.TX
-                Surface(
-                    color = TacticalSurface.copy(alpha = 0.93f),
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, TacticalOutline, RoundedCornerShape(16.dp))
-                ) {
-                    Column(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        RfQuickPlacementStrip(
-                            placementChoice = viewshedState.placementMode.toRfChoice(),
-                            isTxTarget = isTxTarget,
-                            hasSwappableEndpoints = viewshedState.hasTxSet || viewshedState.hasRxSet,
-                            testTagPrefix = "viewshed",
-                            onSelectMode = { onSetViewshedPlacementMode(it.toViewshedMode()) },
-                            onDropAtCenter = onDropViewshedAtCenter,
-                            onSwapTxRx = onSwapViewshedTxRx,
-                            trailingContent = {
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Surface(
-                                        onClick = onOpenLayers,
-                                        color = if (enabledLayersCount > 0) NodeDirectGreen.copy(alpha = 0.16f) else TacticalSurfaceElevated,
-                                        shape = RoundedCornerShape(10.dp),
-                                        border = BorderStroke(1.dp, if (enabledLayersCount > 0) NodeDirectGreen.copy(alpha = 0.7f) else TacticalOutline),
-                                        modifier = Modifier
-                                            .minimumInteractiveComponentSize()
-                                            .testTag("viewshed_layers_button")
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Layers,
-                                                contentDescription = stringResource(R.string.saved_layers_title),
-                                                tint = if (enabledLayersCount > 0) NodeDirectGreen else NodeMultiHopSky,
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                            if (enabledLayersCount > 0) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .clip(CircleShape)
-                                                        .background(NodeDirectGreen)
-                                                        .padding(horizontal = 5.dp, vertical = 1.dp)
-                                                ) {
-                                                    Text(
-                                                        text = enabledLayersCount.toString(),
-                                                        fontFamily = JetBrainsMonoFontFamily,
-                                                        fontWeight = FontWeight.Bold,
-                                                        fontSize = 10.sp,
-                                                        color = TacticalCanvas
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                    if (onOpenOfflineMaps != null) {
-                                        OfflineMapsToolbarIconButton(
-                                            isOfflineOnlyMode = offlineDemState.isOfflineOnlyMode,
-                                            isDownloading = offlineDemState.activeDownload != null,
-                                            onClick = onOpenOfflineMaps
-                                        )
-                                    }
-                                }
-                            }
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(modifier = Modifier.weight(1f)) {
-                                SiteCoordinatesStrip(uiState = viewshedState)
-                            }
-                            if (onOpenLiveSync != null) {
-                                Spacer(Modifier.width(6.dp))
-                                LiveSyncToolbarBadge(
-                                    status = liveSyncStatus,
-                                    onClick = onOpenLiveSync
-                                )
-                            }
-                        }
-                    }
-                }
                 AnimatedVisibility(visible = viewshedState.errorMessage != null) {
                     RfFloatingErrorBanner(
                         message = viewshedState.errorMessage.orEmpty(),
@@ -405,54 +311,6 @@ internal fun WorkspaceTopFloatingOverlay(
             }
 
             WorkspaceMode.BRIDGE -> {
-                val isTxTarget = bridgeState.effectivePlacementTarget == BridgePlacementTarget.TX
-                Surface(
-                    color = TacticalSurface.copy(alpha = 0.93f),
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, TacticalOutline, RoundedCornerShape(16.dp))
-                ) {
-                    Column(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        RfQuickPlacementStrip(
-                            placementChoice = bridgeState.placementMode.toRfChoice(),
-                            isTxTarget = isTxTarget,
-                            hasSwappableEndpoints = bridgeState.hasTxSet || bridgeState.hasRxSet,
-                            testTagPrefix = "bridge",
-                            onSelectMode = { onSetBridgePlacementMode(it.toBridgeMode()) },
-                            onDropAtCenter = onDropBridgeAtCenter,
-                            onSwapTxRx = onSwapBridgeTxRx,
-                            trailingContent = if (onOpenOfflineMaps != null) {
-                                {
-                                    OfflineMapsToolbarIconButton(
-                                        isOfflineOnlyMode = offlineDemState.isOfflineOnlyMode,
-                                        isDownloading = offlineDemState.activeDownload != null,
-                                        onClick = onOpenOfflineMaps
-                                    )
-                                }
-                            } else null
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(modifier = Modifier.weight(1f)) {
-                                BridgeStatusLine(uiState = bridgeState)
-                            }
-                            if (onOpenLiveSync != null) {
-                                Spacer(Modifier.width(6.dp))
-                                LiveSyncToolbarBadge(
-                                    status = liveSyncStatus,
-                                    onClick = onOpenLiveSync
-                                )
-                            }
-                        }
-                    }
-                }
                 AnimatedVisibility(visible = bridgeState.errorMessage != null) {
                     RfFloatingErrorBanner(
                         message = bridgeState.errorMessage.orEmpty(),
@@ -473,50 +331,15 @@ internal fun WorkspaceTopFloatingOverlay(
                     }
                 }
             }
-        }
-    }
-}
 
-@Composable
-private fun OfflineMapsToolbarIconButton(
-    isOfflineOnlyMode: Boolean,
-    isDownloading: Boolean,
-    onClick: () -> Unit
-) {
-    Surface(
-        onClick = onClick,
-        color = when {
-            isOfflineOnlyMode -> NodeSelfAmber.copy(alpha = 0.18f)
-            isDownloading -> NodeDirectGreen.copy(alpha = 0.18f)
-            else -> TacticalSurfaceElevated
-        },
-        shape = RoundedCornerShape(10.dp),
-        border = BorderStroke(
-            1.dp,
-            when {
-                isOfflineOnlyMode -> NodeSelfAmber.copy(alpha = 0.75f)
-                isDownloading -> NodeDirectGreen.copy(alpha = 0.75f)
-                else -> TacticalOutline
+            WorkspaceMode.LIDAR_STREET -> {
+                AnimatedVisibility(visible = lidarState.errorMessage != null) {
+                    RfFloatingErrorBanner(
+                        message = lidarState.errorMessage.orEmpty(),
+                        onDismiss = onDismissLidarError
+                    )
+                }
             }
-        ),
-        modifier = Modifier
-            .minimumInteractiveComponentSize()
-            .testTag("offline_maps_toolbar_button")
-    ) {
-        Box(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = if (isOfflineOnlyMode) Icons.Default.CloudOff else Icons.Default.CloudDownload,
-                contentDescription = stringResource(R.string.action_offline_maps),
-                tint = when {
-                    isOfflineOnlyMode -> NodeSelfAmber
-                    isDownloading -> NodeDirectGreen
-                    else -> TextSecondary
-                },
-                modifier = Modifier.size(16.dp)
-            )
         }
     }
 }
@@ -810,6 +633,7 @@ internal fun WorkspaceModalsHost(
     meshState: NodeMapUiState,
     viewshedState: ViewshedUiState,
     bridgeState: BridgeUiState,
+    lidarState: LidarStreetUiState = LidarStreetUiState(),
     activeMapView: MapView?,
     showFiltersSheet: Boolean,
     showSavedLayersSheet: Boolean,
@@ -880,6 +704,9 @@ internal fun WorkspaceModalsHost(
     onAssignViewshedRx: (MeshNode) -> Unit,
     onAssignBridgeTx: (MeshNode) -> Unit,
     onAssignBridgeRx: (MeshNode) -> Unit,
+    onAssignLidarStreet: ((MeshNode) -> Unit)? = null,
+    onClearLidarOverlay: () -> Unit = {},
+    onResetLidarPins: () -> Unit = {},
     onInspectFresnelSightline: (MeshNode) -> Unit,
     showOfflineMapsDialog: Boolean = false,
     offlineDemState: OfflineDemUiState = OfflineDemUiState(),
@@ -1024,6 +851,21 @@ internal fun WorkspaceModalsHost(
                     onDismiss = onDismissMapTools
                 )
             }
+            WorkspaceMode.LIDAR_STREET -> {
+                MapToolsBottomSheet(
+                    baseLayer = meshState.baseLayer,
+                    legendMode = MapToolsLegendMode.VIEWSHED,
+                    sensitivityDbm = LidarViewshedEngine.SX1262_LONGFAST_SENSITIVITY_DBM,
+                    testTagPrefix = "lidar",
+                    onSelectBaseLayer = onSelectBaseLayer,
+                    onExport = onOpenExportDialog,
+                    hasClearableOverlay = lidarState.currentResult != null && !lidarState.isCalculating,
+                    onClearOverlay = onClearLidarOverlay,
+                    hasResettablePins = lidarState.hasAnyOverlayOrPins && !lidarState.isCalculating,
+                    onResetPins = onResetLidarPins,
+                    onDismiss = onDismissMapTools
+                )
+            }
         }
     }
 
@@ -1081,6 +923,7 @@ internal fun WorkspaceModalsHost(
                 onAssignViewshedRx = onAssignViewshedRx,
                 onAssignBridgeTx = onAssignBridgeTx,
                 onAssignBridgeRx = onAssignBridgeRx,
+                onAssignLidarStreet = onAssignLidarStreet,
                 onInspectFresnelSightline = if (meshState.selfNode?.hasValidGps == true && !selected.isSelf && selected.hasValidGps) {
                     onInspectFresnelSightline
                 } else null,
@@ -1091,27 +934,39 @@ internal fun WorkspaceModalsHost(
     }
 
     inspectedRfNode?.let { tappedNode ->
-        val isTx = if (activeMode == WorkspaceMode.VIEWSHED) {
-            viewshedState.sourceNode?.let { it.id == tappedNode.id && it.num == tappedNode.num } == true
-        } else {
-            bridgeState.txNode?.let { it.id == tappedNode.id && it.num == tappedNode.num } == true
+        val isTx = when (activeMode) {
+            WorkspaceMode.VIEWSHED -> viewshedState.sourceNode?.let { it.id == tappedNode.id && it.num == tappedNode.num } == true
+            WorkspaceMode.BRIDGE -> bridgeState.txNode?.let { it.id == tappedNode.id && it.num == tappedNode.num } == true
+            WorkspaceMode.LIDAR_STREET -> lidarState.sourceNode?.let { it.id == tappedNode.id && it.num == tappedNode.num } == true
+            WorkspaceMode.MESH -> false
         }
-        val isRx = if (activeMode == WorkspaceMode.VIEWSHED) {
-            viewshedState.rxNode?.let { it.id == tappedNode.id && it.num == tappedNode.num } == true
-        } else {
-            bridgeState.rxNode?.let { it.id == tappedNode.id && it.num == tappedNode.num } == true
+        val isRx = when (activeMode) {
+            WorkspaceMode.VIEWSHED -> viewshedState.rxNode?.let { it.id == tappedNode.id && it.num == tappedNode.num } == true
+            WorkspaceMode.BRIDGE -> bridgeState.rxNode?.let { it.id == tappedNode.id && it.num == tappedNode.num } == true
+            WorkspaceMode.LIDAR_STREET, WorkspaceMode.MESH -> false
         }
         RfNodeSiteActionSheet(
             node = tappedNode,
             isCurrentTx = isTx,
             isCurrentRx = isRx,
             onSetAsTx = {
-                if (activeMode == WorkspaceMode.VIEWSHED) onAssignViewshedTx(tappedNode) else onAssignBridgeTx(tappedNode)
+                when (activeMode) {
+                    WorkspaceMode.VIEWSHED -> onAssignViewshedTx(tappedNode)
+                    WorkspaceMode.BRIDGE -> onAssignBridgeTx(tappedNode)
+                    WorkspaceMode.LIDAR_STREET -> onAssignLidarStreet?.invoke(tappedNode)
+                    WorkspaceMode.MESH -> Unit
+                }
                 onDismissRfNodeSheet()
             },
-            onSetAsRx = {
-                if (activeMode == WorkspaceMode.VIEWSHED) onAssignViewshedRx(tappedNode) else onAssignBridgeRx(tappedNode)
-                onDismissRfNodeSheet()
+            onSetAsRx = if (activeMode == WorkspaceMode.LIDAR_STREET) null else {
+                {
+                    when (activeMode) {
+                        WorkspaceMode.VIEWSHED -> onAssignViewshedRx(tappedNode)
+                        WorkspaceMode.BRIDGE -> onAssignBridgeRx(tappedNode)
+                        WorkspaceMode.LIDAR_STREET, WorkspaceMode.MESH -> Unit
+                    }
+                    onDismissRfNodeSheet()
+                }
             },
             onAlignAntenna = if (onAlignNode != null && tappedNode.hasValidGps) {
                 {
@@ -1256,6 +1111,7 @@ internal fun WorkspaceModalsHost(
         WorkspaceMode.MESH -> "lemesh_map"
         WorkspaceMode.VIEWSHED -> "lemesh_viewshed"
         WorkspaceMode.BRIDGE -> "lemesh_bridge"
+        WorkspaceMode.LIDAR_STREET -> "lemesh_lidar"
     }
     MapExportHost(
         visible = showExportDialog,
@@ -1266,6 +1122,7 @@ internal fun WorkspaceModalsHost(
                 WorkspaceMode.MESH -> MapExportEngine.buildNodeMapGeoJson(meshState, viewshedState.savedLayers)
                 WorkspaceMode.VIEWSHED -> MapExportEngine.buildViewshedGeoJson(viewshedState, meshState.baseLayer.displayName)
                 WorkspaceMode.BRIDGE -> MapExportEngine.buildBridgeGeoJson(bridgeState, meshState.baseLayer.displayName)
+                WorkspaceMode.LIDAR_STREET -> MapExportEngine.buildLidarGeoJson(lidarState, meshState.baseLayer.displayName)
             }
         },
         buildSummary = {
@@ -1273,6 +1130,7 @@ internal fun WorkspaceModalsHost(
                 WorkspaceMode.MESH -> MapExportEngine.buildNodeMapSummary(meshState, viewshedState.savedLayers)
                 WorkspaceMode.VIEWSHED -> MapExportEngine.buildViewshedSummary(viewshedState, meshState.baseLayer)
                 WorkspaceMode.BRIDGE -> MapExportEngine.buildBridgeSummary(bridgeState, meshState.baseLayer)
+                WorkspaceMode.LIDAR_STREET -> MapExportEngine.buildLidarSummary(lidarState, meshState.baseLayer)
             }
         },
         buildKml = {
@@ -1280,6 +1138,7 @@ internal fun WorkspaceModalsHost(
                 WorkspaceMode.MESH -> MapExportEngine.buildNodeMapKml(meshState, viewshedState.savedLayers)
                 WorkspaceMode.VIEWSHED -> MapExportEngine.buildViewshedKml(viewshedState, meshState.baseLayer.displayName)
                 WorkspaceMode.BRIDGE -> MapExportEngine.buildBridgeKml(bridgeState, meshState.baseLayer.displayName)
+                WorkspaceMode.LIDAR_STREET -> MapExportEngine.buildLidarKml(lidarState, meshState.baseLayer.displayName)
             }
         },
         buildNodeDbBackupJson = if (activeMode == WorkspaceMode.MESH) onBuildNodeDbBackupJson else null,

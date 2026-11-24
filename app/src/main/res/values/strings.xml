@@ -1,5 +1,7 @@
 <resources>
-    <string name="app_name">LEMesh NodeDB Map</string>
+    <string name="app_name">MeshHorizon</string>
+    <string name="app_full_title">LEMesh Horizon</string>
+    <string name="app_subtitle">915 MHz Viewshed &amp; Relay Planner</string>
     <string name="action_load_json">Load JSON</string>
     <string name="action_fit_bounds">Fit Nodes</string>
     <string name="action_clear_search">Clear Search</string>
@@ -145,9 +147,18 @@
     <string name="nav_mesh_map">Mesh Map</string>
     <string name="nav_viewshed">Viewshed</string>
     <string name="nav_bridge_finder">Bridge Finder</string>
+    <string name="nav_lidar_street">LiDAR</string>
     <string name="inspector_viewshed_from_node">Viewshed from Node</string>
+    <string name="inspector_lidar_street">LiDAR Street Viewshed</string>
     <string name="inspector_set_bridge_a">Set Bridge A</string>
     <string name="inspector_set_bridge_b">Set Bridge B</string>
+    <string name="lidar_drop_pin">Drop TX</string>
+    <string name="lidar_street_title">LiDAR / Street Viewshed</string>
+    <string name="lidar_calculate_viewshed">Calculate Viewshed</string>
+    <string name="lidar_import_local_grid">Import .tif / .asc</string>
+    <string name="lidar_export_geotiff">Export GeoTIFF</string>
+    <string name="lidar_tx_rf_params_section">TX Radio &amp; Cable Budget</string>
+    <string name="lidar_sx1262_rx_summary">Assumed RX: SX1262 LongFast • 250 kHz • -114 dBm NF • -134 dBm</string>
     <string name="overlay_continuity_title">Cross-Mode Overlay Continuity</string>
     <string name="overlay_continuity_keep_nodedb">NodeDB + Active RF</string>
     <string name="overlay_continuity_active_only">Active Mode Only</string>

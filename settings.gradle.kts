@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "LEMesh NodeDB Map"
+rootProject.name = "LEMesh Horizon"
 
 include(":app")

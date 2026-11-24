@@ -330,6 +330,7 @@ fun NodeInspectorBottomSheet(
     onAssignViewshedRx: (MeshNode) -> Unit = {},
     onAssignBridgeTx: (MeshNode) -> Unit = {},
     onAssignBridgeRx: (MeshNode) -> Unit = {},
+    onAssignLidarStreet: ((MeshNode) -> Unit)? = null,
     onInspectFresnelSightline: ((MeshNode) -> Unit)? = null,
     onEditNode: ((MeshNode) -> Unit)? = null,
     onAlignAntenna: ((MeshNode) -> Unit)? = null
@@ -350,6 +351,7 @@ fun NodeInspectorBottomSheet(
             onAssignViewshedRx = onAssignViewshedRx,
             onAssignBridgeTx = onAssignBridgeTx,
             onAssignBridgeRx = onAssignBridgeRx,
+            onAssignLidarStreet = onAssignLidarStreet,
             onInspectFresnelSightline = onInspectFresnelSightline,
             onEditNode = onEditNode,
             onAlignAntenna = onAlignAntenna,
@@ -372,6 +374,7 @@ fun NodeInspectorContent(
     onAssignViewshedRx: (MeshNode) -> Unit = {},
     onAssignBridgeTx: (MeshNode) -> Unit = {},
     onAssignBridgeRx: (MeshNode) -> Unit = {},
+    onAssignLidarStreet: ((MeshNode) -> Unit)? = null,
     onInspectFresnelSightline: ((MeshNode) -> Unit)? = null,
     onEditNode: ((MeshNode) -> Unit)? = null,
     onAlignAntenna: ((MeshNode) -> Unit)? = null,
@@ -723,6 +726,36 @@ fun NodeInspectorContent(
                             Text(
                                 text = stringResource(R.string.inspector_set_bridge_b),
                                 fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+
+                    if (onAssignLidarStreet != null) {
+                        OutlinedButton(
+                            onClick = { onAssignLidarStreet(node) },
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, NodeDirectGreen.copy(alpha = 0.75f)),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = NodeDirectGreen.copy(alpha = 0.12f),
+                                contentColor = NodeDirectGreen
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .testTag("inspector_lidar_street_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Terrain,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = stringResource(R.string.inspector_lidar_street),
+                                fontWeight = FontWeight.Bold,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )

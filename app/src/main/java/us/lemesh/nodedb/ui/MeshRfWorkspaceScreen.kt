@@ -24,9 +24,11 @@ import androidx.compose.material.icons.filled.CellTower
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Terrain
 import androidx.compose.material.icons.outlined.CellTower
 import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.Map
+import androidx.compose.material.icons.outlined.Terrain
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -144,7 +146,8 @@ data class MeshModeActions(
     val onAssignViewshedFromNode: (MeshNode) -> Unit = {},
     val onAssignViewshedRx: (MeshNode) -> Unit = {},
     val onAssignBridgeA: (MeshNode) -> Unit = {},
-    val onAssignBridgeB: (MeshNode) -> Unit = {}
+    val onAssignBridgeB: (MeshNode) -> Unit = {},
+    val onAssignLidarFromNode: (MeshNode) -> Unit = {}
 )
 
 data class ViewshedModeActions(
@@ -233,6 +236,31 @@ data class LiveSyncActions(
     val onDismissError: () -> Unit = {}
 )
 
+data class LidarStreetModeActions(
+    val onMapTap: (Double, Double) -> Unit = { _, _ -> },
+    val onTxDragEnd: (Double, Double) -> Unit = { _, _ -> },
+    val onSelectTxNode: (MeshNode) -> Unit = {},
+    val onTxHeightSliderChange: (Float) -> Unit = {},
+    val onTxHeightTextChange: (String) -> Unit = {},
+    val onRxHeightSliderChange: (Float) -> Unit = {},
+    val onRxHeightTextChange: (String) -> Unit = {},
+    val onRadiusSliderChange: (Int) -> Unit = {},
+    val onRadiusTextChange: (String) -> Unit = {},
+    val onFrequencyChange: (String) -> Unit = {},
+    val onTxPowerChange: (Float) -> Unit = {},
+    val onAntennaGainChange: (Float) -> Unit = {},
+    val onCableLossChange: (Float) -> Unit = {},
+    val onOpacityChange: (Float) -> Unit = {},
+    val onCalculateViewshed: () -> Unit = {},
+    val onImportLocalLidar: () -> Unit = {},
+    val onExportGeoTiff: () -> Unit = {},
+    val onClearImportedLidar: () -> Unit = {},
+    val onClearOverlay: () -> Unit = {},
+    val onResetPins: () -> Unit = {},
+    val onDismissExportStatus: () -> Unit = {},
+    val onDismissError: () -> Unit = {}
+)
+
 @Composable
 fun MeshRfWorkspaceScreen(
     activeMode: WorkspaceMode,
@@ -240,11 +268,13 @@ fun MeshRfWorkspaceScreen(
     meshState: NodeMapUiState = NodeMapUiState(),
     viewshedState: ViewshedUiState = ViewshedUiState(),
     bridgeState: BridgeUiState = BridgeUiState(),
+    lidarState: LidarStreetUiState = LidarStreetUiState(),
     onSwitchMode: (WorkspaceMode) -> Unit = {},
     onPinDragStart: (WorkspaceMode) -> Unit = {},
     meshActions: MeshModeActions = MeshModeActions(),
     viewshedActions: ViewshedModeActions = ViewshedModeActions(),
     bridgeActions: BridgeModeActions = BridgeModeActions(),
+    lidarActions: LidarStreetModeActions = LidarStreetModeActions(),
     offlineDemState: OfflineDemUiState = OfflineDemUiState(),
     offlineActions: OfflineMapsActions = OfflineMapsActions(),
     liveSyncState: LiveSyncUiState = LiveSyncUiState(),
@@ -264,6 +294,7 @@ fun MeshRfWorkspaceScreen(
     var inspectedRfNode by remember { mutableStateOf<MeshNode?>(null) }
     var viewshedDrawerExpanded by rememberSaveable { mutableStateOf(false) }
     var bridgeDrawerExpanded by rememberSaveable { mutableStateOf(false) }
+    var lidarDrawerExpanded by rememberSaveable { mutableStateOf(false) }
     var dropCenterRequestId by remember { mutableLongStateOf(0L) }
     var activeMapView by remember { mutableStateOf<MapView?>(null) }
 
@@ -313,9 +344,29 @@ fun MeshRfWorkspaceScreen(
         viewshedState.txLat,
         viewshedState.txLon,
         viewshedState.rxLat,
-        viewshedState.rxLon
+        viewshedState.rxLon,
+        lidarState.txLat,
+        lidarState.txLon,
+        lidarState.siteLabel,
+        lidarState.groundElevationMeters,
+        lidarState.txHeightFt
     ) {
         buildList {
+            val lTxLat = lidarState.txLat
+            val lTxLon = lidarState.txLon
+            if (lTxLat != null && lTxLon != null) {
+                add(
+                    AlignmentTarget(
+                        id = "lidar_tx",
+                        label = "TX: ${lidarState.siteLabel}",
+                        subtitle = "LiDAR TX Site",
+                        latitude = lTxLat,
+                        longitude = lTxLon,
+                        elevationMeters = lidarState.groundElevationMeters
+                            ?.plus(lidarState.txHeightFt * us.lemesh.nodedb.data.LidarViewshedEngine.FEET_TO_METERS)
+                    )
+                )
+            }
             bridgeState.currentResult?.topCandidates?.forEach { cand ->
                 add(
                     AlignmentTarget(
@@ -428,6 +479,7 @@ fun MeshRfWorkspaceScreen(
             val mState = props.meshState
             val vState = props.viewshedState
             val bState = props.bridgeState
+            val lState = props.lidarState
             val vpState = props.viewportState
             val dropId = props.dropId
             val nodesForCanvas = if (mode == WorkspaceMode.MESH) mState.filteredMapNodes else props.allPlottedGpsNodes
@@ -455,6 +507,7 @@ fun MeshRfWorkspaceScreen(
                     WorkspaceMode.MESH -> vState.overlayOpacity
                     WorkspaceMode.VIEWSHED -> vState.overlayOpacity
                     WorkspaceMode.BRIDGE -> bState.overlayOpacity
+                    WorkspaceMode.LIDAR_STREET -> lState.overlayOpacity
                 },
                 viewshedTxLat = vState.txLat,
                 viewshedTxLon = vState.txLon,
@@ -479,6 +532,10 @@ fun MeshRfWorkspaceScreen(
                 bridgeObstructionFocusNonce = bState.obstructionFocusNonce,
                 bridgeLiveDirectHop = bState.liveDirectHop,
                 bridgeScrubbedProfileSample = bState.scrubbedProfileSample,
+                lidarTxLat = lState.txLat,
+                lidarTxLon = lState.txLon,
+                lidarRadiusMeters = lState.radiusMeters,
+                lidarResult = lState.currentResult,
                 dropCenterRequestId = dropId,
                 fitBoundsRequestId = vpState.fitBoundsRequestId,
                 centerFocusRequestId = vpState.centerFocusRequestId,
@@ -500,33 +557,42 @@ fun MeshRfWorkspaceScreen(
                         WorkspaceMode.MESH -> meshActions.onMapCoordinateTap(lat, lon)
                         WorkspaceMode.VIEWSHED -> viewshedActions.onSetCustomCoordinate(lat, lon)
                         WorkspaceMode.BRIDGE -> bridgeActions.onMapTap(lat, lon)
+                        WorkspaceMode.LIDAR_STREET -> lidarActions.onMapTap(lat, lon)
                     }
                 },
                 onDropAtMapCenter = { lat, lon ->
                     when (mode) {
                         WorkspaceMode.VIEWSHED -> viewshedActions.onSetCustomCoordinate(lat, lon)
                         WorkspaceMode.BRIDGE -> bridgeActions.onMapTap(lat, lon)
+                        WorkspaceMode.LIDAR_STREET -> lidarActions.onMapTap(lat, lon)
                         WorkspaceMode.MESH -> Unit
                     }
                 },
                 onPinDragStart = onPinDragStart,
                 onTxDragEnd = { lat, lon ->
-                    if (mode == WorkspaceMode.VIEWSHED) viewshedActions.onTxDragEnd(lat, lon)
-                    else if (mode == WorkspaceMode.BRIDGE) bridgeActions.onTxDragEnd(lat, lon)
+                    when (mode) {
+                        WorkspaceMode.VIEWSHED -> viewshedActions.onTxDragEnd(lat, lon)
+                        WorkspaceMode.BRIDGE -> bridgeActions.onTxDragEnd(lat, lon)
+                        WorkspaceMode.LIDAR_STREET -> lidarActions.onTxDragEnd(lat, lon)
+                        WorkspaceMode.MESH -> Unit
+                    }
                 },
                 onRxDragEnd = { lat, lon ->
-                    if (mode == WorkspaceMode.VIEWSHED) viewshedActions.onRxDragEnd(lat, lon)
-                    else if (mode == WorkspaceMode.BRIDGE) bridgeActions.onRxDragEnd(lat, lon)
+                    when (mode) {
+                        WorkspaceMode.VIEWSHED -> viewshedActions.onRxDragEnd(lat, lon)
+                        WorkspaceMode.BRIDGE -> bridgeActions.onRxDragEnd(lat, lon)
+                        WorkspaceMode.LIDAR_STREET, WorkspaceMode.MESH -> Unit
+                    }
                 },
                 onEndpointPinTap = { endpoint ->
-                    if (mode == WorkspaceMode.VIEWSHED) {
-                        viewshedActions.onSetPlacementTarget(
+                    when (mode) {
+                        WorkspaceMode.VIEWSHED -> viewshedActions.onSetPlacementTarget(
                             if (endpoint == RfPinEndpoint.TX) ViewshedPlacementTarget.TX else ViewshedPlacementTarget.RX
                         )
-                    } else if (mode == WorkspaceMode.BRIDGE) {
-                        bridgeActions.onSetPlacementTarget(
+                        WorkspaceMode.BRIDGE -> bridgeActions.onSetPlacementTarget(
                             if (endpoint == RfPinEndpoint.TX) BridgePlacementTarget.TX else BridgePlacementTarget.RX
                         )
+                        WorkspaceMode.LIDAR_STREET, WorkspaceMode.MESH -> Unit
                     }
                 },
                 onCandidatePinTap = bridgeActions.onSelectCandidate,
@@ -573,6 +639,7 @@ fun MeshRfWorkspaceScreen(
                             meshState = meshState,
                             viewshedState = viewshedState,
                             bridgeState = bridgeState,
+                            lidarState = lidarState,
                             viewportState = viewportState,
                             dropId = dropCenterRequestId,
                             allPlottedGpsNodes = allPlottedGpsNodes,
@@ -585,6 +652,7 @@ fun MeshRfWorkspaceScreen(
                         meshState = meshState,
                         viewshedState = viewshedState,
                         bridgeState = bridgeState,
+                        lidarState = lidarState,
                         activeFilterCount = activeFilterCount,
                         layersBadgeCount = layersBadgeCount,
                         hasFilteredSubset = hasFilteredSubset,
@@ -608,6 +676,8 @@ fun MeshRfWorkspaceScreen(
                         onSwapBridgeTxRx = bridgeActions.onSwapTxRx,
                         onDismissBridgeError = bridgeActions.onDismissError,
                         onDismissBridgeObstructionCallout = { bridgeActions.onSelectObstruction(null) },
+                        onDropLidarAtCenter = { dropCenterRequestId++ },
+                        onDismissLidarError = lidarActions.onDismissError,
                         offlineDemState = offlineDemState,
                         onOpenOfflineMaps = { showOfflineMapsDialog = true },
                         liveSyncStatus = liveSyncState.status,
@@ -643,12 +713,19 @@ fun MeshRfWorkspaceScreen(
                             borderColor = NodeDirectGreen,
                             modifier = Modifier.align(Alignment.Center)
                         )
+                    } else if (activeMode == WorkspaceMode.LIDAR_STREET && (lidarState.isCalculating || lidarState.isExportingGeoTiff)) {
+                        RfPlannerProgressOverlay(
+                            note = lidarState.statusNote ?: "Computing 1 m street viewshed…",
+                            borderColor = NodeDirectGreen,
+                            modifier = Modifier.align(Alignment.Center)
+                        )
                     }
 
                     val fabTestTag = when (activeMode) {
                         WorkspaceMode.MESH -> "map_tools_fab"
                         WorkspaceMode.VIEWSHED -> "viewshed_map_tools_fab"
                         WorkspaceMode.BRIDGE -> "bridge_map_tools_fab"
+                        WorkspaceMode.LIDAR_STREET -> "lidar_map_tools_fab"
                     }
                     if (isSplitPane) {
                         Column(
@@ -835,6 +912,31 @@ fun MeshRfWorkspaceScreen(
                                     onSelectFadeMarginPreset = onSelectFadeMarginPreset,
                                     onAlignCandidate = openAlignForCandidate
                                 )
+                                WorkspaceMode.LIDAR_STREET -> CompactLidarStreetBottomDrawer(
+                                    uiState = lidarState,
+                                    plottedNodes = plottedGpsNodes,
+                                    controlsExpanded = lidarDrawerExpanded,
+                                    onToggleExpanded = { lidarDrawerExpanded = !lidarDrawerExpanded },
+                                    onSelectTxNode = lidarActions.onSelectTxNode,
+                                    onTxHeightSliderChange = lidarActions.onTxHeightSliderChange,
+                                    onTxHeightTextChange = lidarActions.onTxHeightTextChange,
+                                    onRxHeightSliderChange = lidarActions.onRxHeightSliderChange,
+                                    onRxHeightTextChange = lidarActions.onRxHeightTextChange,
+                                    onRadiusSliderChange = lidarActions.onRadiusSliderChange,
+                                    onRadiusTextChange = lidarActions.onRadiusTextChange,
+                                    onFrequencyChange = lidarActions.onFrequencyChange,
+                                    onTxPowerChange = lidarActions.onTxPowerChange,
+                                    onAntennaGainChange = lidarActions.onAntennaGainChange,
+                                    onCableLossChange = lidarActions.onCableLossChange,
+                                    onOpacityChange = lidarActions.onOpacityChange,
+                                    onCalculateViewshed = lidarActions.onCalculateViewshed,
+                                    onImportLocalLidar = lidarActions.onImportLocalLidar,
+                                    onExportGeoTiff = lidarActions.onExportGeoTiff,
+                                    onClearImportedLidar = lidarActions.onClearImportedLidar,
+                                    onDismissExportStatus = lidarActions.onDismissExportStatus,
+                                    onDismissError = lidarActions.onDismissError,
+                                    onSelectFadeMarginPreset = onSelectFadeMarginPreset
+                                )
                             }
                         }
                     }
@@ -846,6 +948,7 @@ fun MeshRfWorkspaceScreen(
                         meshState = meshState,
                         viewshedState = viewshedState,
                         bridgeState = bridgeState,
+                        lidarState = lidarState,
                         activeMapView = activeMapView,
                         showFiltersSheet = showFiltersSheet,
                         showSavedLayersSheet = showSavedLayersSheet,
@@ -916,6 +1019,9 @@ fun MeshRfWorkspaceScreen(
                         onAssignViewshedRx = if (activeMode == WorkspaceMode.MESH) meshActions.onAssignViewshedRx else viewshedActions.onSelectRxNode,
                         onAssignBridgeTx = if (activeMode == WorkspaceMode.MESH) meshActions.onAssignBridgeA else bridgeActions.onSelectTxNode,
                         onAssignBridgeRx = if (activeMode == WorkspaceMode.MESH) meshActions.onAssignBridgeB else bridgeActions.onSelectRxNode,
+                        onAssignLidarStreet = if (activeMode == WorkspaceMode.MESH) meshActions.onAssignLidarFromNode else lidarActions.onSelectTxNode,
+                        onClearLidarOverlay = lidarActions.onClearOverlay,
+                        onResetLidarPins = lidarActions.onResetPins,
                         onInspectFresnelSightline = meshActions.onInspectFresnelSightline,
                         showOfflineMapsDialog = showOfflineMapsDialog,
                         offlineDemState = offlineDemState,
@@ -1015,7 +1121,8 @@ fun MeshRfWorkspaceScreen(
                                 onApplyLosMastFix = meshActions.onApplyLosMastFix,
                                 onOpenOfflineMaps = { showOfflineMapsDialog = true },
                                 onSelectFadeMarginPreset = onSelectFadeMarginPreset,
-                                onAlignNode = openAlignForNode
+                                onAlignNode = openAlignForNode,
+                                onAssignLidarStreet = meshActions.onAssignLidarFromNode
                             )
                             WorkspaceMode.VIEWSHED -> ViewshedModeSidePanel(
                                 uiState = viewshedState,
@@ -1072,6 +1179,29 @@ fun MeshRfWorkspaceScreen(
                                 onOpenOfflineMaps = { showOfflineMapsDialog = true },
                                 onSelectFadeMarginPreset = onSelectFadeMarginPreset,
                                 onAlignCandidate = openAlignForCandidate
+                            )
+                            WorkspaceMode.LIDAR_STREET -> LidarStreetModeSidePanel(
+                                uiState = lidarState,
+                                plottedNodes = plottedGpsNodes,
+                                onSelectTxNode = lidarActions.onSelectTxNode,
+                                onTxHeightSliderChange = lidarActions.onTxHeightSliderChange,
+                                onTxHeightTextChange = lidarActions.onTxHeightTextChange,
+                                onRxHeightSliderChange = lidarActions.onRxHeightSliderChange,
+                                onRxHeightTextChange = lidarActions.onRxHeightTextChange,
+                                onRadiusSliderChange = lidarActions.onRadiusSliderChange,
+                                onRadiusTextChange = lidarActions.onRadiusTextChange,
+                                onFrequencyChange = lidarActions.onFrequencyChange,
+                                onTxPowerChange = lidarActions.onTxPowerChange,
+                                onAntennaGainChange = lidarActions.onAntennaGainChange,
+                                onCableLossChange = lidarActions.onCableLossChange,
+                                onOpacityChange = lidarActions.onOpacityChange,
+                                onCalculateViewshed = lidarActions.onCalculateViewshed,
+                                onImportLocalLidar = lidarActions.onImportLocalLidar,
+                                onExportGeoTiff = lidarActions.onExportGeoTiff,
+                                onClearImportedLidar = lidarActions.onClearImportedLidar,
+                                onDismissExportStatus = lidarActions.onDismissExportStatus,
+                                onDismissError = lidarActions.onDismissError,
+                                onSelectFadeMarginPreset = onSelectFadeMarginPreset
                             )
                         }
                     }
@@ -1166,9 +1296,22 @@ private fun WorkspaceNavigationBar(
                     contentDescription = stringResource(R.string.nav_bridge_finder)
                 )
             },
-            label = { Text(stringResource(R.string.nav_bridge_finder)) },
+            label = { Text(stringResource(R.string.nav_bridge_finder), maxLines = 1, softWrap = false) },
             colors = navColors,
             modifier = Modifier.testTag("nav_tab_bridge")
+        )
+        NavigationBarItem(
+            selected = activeMode == WorkspaceMode.LIDAR_STREET,
+            onClick = { onSelectMode(WorkspaceMode.LIDAR_STREET) },
+            icon = {
+                Icon(
+                    imageVector = if (activeMode == WorkspaceMode.LIDAR_STREET) Icons.Filled.Terrain else Icons.Outlined.Terrain,
+                    contentDescription = stringResource(R.string.nav_lidar_street)
+                )
+            },
+            label = { Text(stringResource(R.string.nav_lidar_street), maxLines = 1, softWrap = false) },
+            colors = navColors,
+            modifier = Modifier.testTag("nav_tab_lidar")
         )
     }
 }
@@ -1179,6 +1322,7 @@ private data class PersistentMapCanvasProps(
     val meshState: NodeMapUiState,
     val viewshedState: ViewshedUiState,
     val bridgeState: BridgeUiState,
+    val lidarState: LidarStreetUiState,
     val viewportState: MapViewportState,
     val dropId: Long,
     val allPlottedGpsNodes: List<MeshNode>,

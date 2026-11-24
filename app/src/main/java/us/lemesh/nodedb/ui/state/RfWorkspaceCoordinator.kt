@@ -13,7 +13,8 @@ import java.util.concurrent.ConcurrentHashMap
 enum class WorkspaceMode(val label: String) {
     MESH("Mesh Map"),
     VIEWSHED("Viewshed"),
-    BRIDGE("Bridge Finder")
+    BRIDGE("Bridge Finder"),
+    LIDAR_STREET("LiDAR")
 }
 
 data class NodeRfPreset(
@@ -42,6 +43,7 @@ class RfWorkspaceCoordinator {
             WorkspaceMode.MESH -> cancelJobsWithPrefix("mesh_transient_")
             WorkspaceMode.VIEWSHED -> cancelJobsWithPrefix("viewshed_transient_")
             WorkspaceMode.BRIDGE -> cancelJobsWithPrefix("bridge_transient_")
+            WorkspaceMode.LIDAR_STREET -> cancelJobsWithPrefix("lidar_transient_")
         }
         _state.update { it.copy(activeMode = mode) }
     }
@@ -65,6 +67,9 @@ class RfWorkspaceCoordinator {
             }
             WorkspaceMode.MESH -> {
                 cancelJobsWithPrefix("mesh_los_")
+            }
+            WorkspaceMode.LIDAR_STREET -> {
+                cancelJobsWithPrefix("lidar_")
             }
         }
     }

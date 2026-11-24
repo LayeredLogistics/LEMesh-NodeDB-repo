@@ -24,6 +24,7 @@ import us.lemesh.nodedb.data.BridgeObstructionItem
 import us.lemesh.nodedb.data.BridgeProfileSample
 import us.lemesh.nodedb.data.BridgeResult
 import us.lemesh.nodedb.data.LayerRenderMode
+import us.lemesh.nodedb.data.LidarViewshedResult
 import us.lemesh.nodedb.data.LinkClassification
 import us.lemesh.nodedb.data.LinkDiagnosticSummary
 import us.lemesh.nodedb.data.LinkDiagnosticTier
@@ -781,6 +782,75 @@ internal fun addBridgeOverlays(
             }
         )
     }
+}
+
+internal fun addLidarStreetOverlays(
+    context: Context,
+    mapView: MapView,
+    dragController: RfPinDragController,
+    overlayPool: CrispOverlayPool,
+    activePoolKeys: MutableSet<String>,
+    activeTxPoint: GeoPoint?,
+    radiusMeters: Int,
+    existingNodes: List<MeshNode>,
+    showNodeDbAndSavedLayers: Boolean,
+    currentResult: LidarViewshedResult?,
+    overlayOpacity: Float,
+    onEndpointPinTap: (RfPinEndpoint) -> Unit,
+    onNodeTap: (MeshNode) -> Unit
+) {
+    if (currentResult != null) {
+        val key = "lidar_street_current"
+        activePoolKeys.add(key)
+        mapView.overlays.add(
+            overlayPool.obtainOverlay(
+                key = key,
+                source = CrispOverlaySource.SingleField(polarField = currentResult.field),
+                opacity = overlayOpacity
+            )
+        )
+    }
+
+    if (activeTxPoint != null) {
+        mapView.overlays.add(
+            Polygon(mapView).apply {
+                points = Polygon.pointsAsCircle(activeTxPoint, radiusMeters.toDouble())
+                fillPaint.color = 0x00000000
+                outlinePaint.color = 0x9922C55E.toInt()
+                outlinePaint.strokeWidth = 2.5f
+                outlinePaint.isAntiAlias = true
+            }
+        )
+    }
+
+    if (showNodeDbAndSavedLayers) {
+        existingNodes.forEach { node ->
+            val lat = node.latitude ?: return@forEach
+            val lon = node.longitude ?: return@forEach
+            mapView.overlays.add(
+                Marker(mapView).apply {
+                    position = GeoPoint(lat, lon)
+                    title = node.displayLongName
+                    setAnchor(0.5f, 0.5f)
+                    icon = createRfNetworkDotDrawable(context, node, isCoveredClear = false)
+                    infoWindow = null
+                    setOnMarkerClickListener { _, _ ->
+                        onNodeTap(node)
+                        true
+                    }
+                }
+            )
+        }
+    }
+
+    appendRfEndpointBadges(
+        context = context,
+        mapView = mapView,
+        dragController = dragController,
+        activeTxPoint = activeTxPoint,
+        activeRxPoint = null,
+        onEndpointPinTap = onEndpointPinTap
+    )
 }
 
 private fun appendRfEndpointBadges(

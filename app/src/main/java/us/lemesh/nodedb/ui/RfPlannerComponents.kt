@@ -893,7 +893,7 @@ fun RfNodeSiteActionSheet(
     isCurrentTx: Boolean,
     isCurrentRx: Boolean,
     onSetAsTx: () -> Unit,
-    onSetAsRx: () -> Unit,
+    onSetAsRx: (() -> Unit)? = null,
     onDismiss: () -> Unit,
     txButtonLabel: String = stringResource(R.string.rf_use_as_tx),
     rxButtonLabel: String = stringResource(R.string.rf_use_as_rx),
@@ -1061,31 +1061,33 @@ fun RfNodeSiteActionSheet(
                     )
                 }
 
-                Button(
-                    onClick = onSetAsRx,
-                    enabled = node.hasValidGps,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = NodeMultiHopSky,
-                        contentColor = TacticalCanvas
-                    ),
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 48.dp)
-                        .testTag("rf_node_set_rx_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Radar,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = rxButtonLabel,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                if (onSetAsRx != null) {
+                    Button(
+                        onClick = onSetAsRx,
+                        enabled = node.hasValidGps,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = NodeMultiHopSky,
+                            contentColor = TacticalCanvas
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp)
+                            .testTag("rf_node_set_rx_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Radar,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = rxButtonLabel,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
 

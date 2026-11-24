@@ -56,7 +56,7 @@ class PolarVisibilityField(
         val dxKm = (lon - originLon) * kmPerDegLon
         val dKm = sqrt(dxKm * dxKm + dyKm * dyKm)
         if (dKm > radiusKm) return -1
-        if (dKm < 0.05) return -2
+        if (dKm * 1000.0 < min(50.0, stepMeters)) return -2
 
         val sIdx = ((dKm * 1000.0) / stepMeters).toInt().coerceIn(0, numSteps - 1)
         var bearingDeg = Math.toDegrees(atan2(dxKm, dyKm))
@@ -126,8 +126,9 @@ class PolarVisibilityField(
             return false
         }
 
-        // Seamless origin core right at the TX/RX antenna
-        if (dKm < 0.012) {
+        // Seamless origin core right at the TX/RX antenna (scales down for 1.5m LiDAR fields)
+        val originCoreKm = min(0.012, stepKm * 1.1)
+        if (dKm < originCoreKm) {
             out[0] = outerFactor
             out[1] = 0.0
             out[2] = ViewshedEngine.STRONG_RSSI_DBM

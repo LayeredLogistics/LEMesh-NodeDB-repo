@@ -201,7 +201,9 @@ fun BridgePlannerScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        // Slim single-card top placement strip
+        var isTopCardExpanded by rememberSaveable { mutableStateOf(true) }
+
+        // Unified collapsible top card
         Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -211,12 +213,9 @@ fun BridgePlannerScreen(
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Surface(
-                color = TacticalSurface.copy(alpha = 0.93f),
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, TacticalOutline, RoundedCornerShape(16.dp))
+            UnifiedHorizonTopCard(
+                expanded = isTopCardExpanded,
+                onToggleExpanded = { isTopCardExpanded = !isTopCardExpanded }
             ) {
                 Column(
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),

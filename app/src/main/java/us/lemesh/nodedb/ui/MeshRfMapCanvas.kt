@@ -28,6 +28,7 @@ import us.lemesh.nodedb.data.BridgeHopEvaluation
 import us.lemesh.nodedb.data.BridgeObstructionItem
 import us.lemesh.nodedb.data.BridgeProfileSample
 import us.lemesh.nodedb.data.BridgeResult
+import us.lemesh.nodedb.data.LidarViewshedResult
 import us.lemesh.nodedb.data.LinkDiagnosticSummary
 import us.lemesh.nodedb.data.LosAnalysisResult
 import us.lemesh.nodedb.data.LosEndpoint
@@ -88,6 +89,11 @@ fun MeshRfMapCanvas(
     bridgeObstructionFocusNonce: Long = 0L,
     bridgeLiveDirectHop: BridgeHopEvaluation? = null,
     bridgeScrubbedProfileSample: BridgeProfileSample? = null,
+    // LiDAR / Street fields
+    lidarTxLat: Double? = null,
+    lidarTxLon: Double? = null,
+    lidarRadiusMeters: Int = 500,
+    lidarResult: LidarViewshedResult? = null,
     // Camera / drop requests
     dropCenterRequestId: Long = 0L,
     fitBoundsRequestId: Long = 0L,
@@ -126,6 +132,7 @@ fun MeshRfMapCanvas(
     var lastHandledCenterFocusId by remember { mutableStateOf(0L) }
     var lastFittedViewshedResult by remember { mutableStateOf<ViewshedResult?>(viewshedResult) }
     var lastFittedBridgeResult by remember { mutableStateOf<BridgeResult?>(bridgeResult) }
+    var lastFittedLidarResult by remember { mutableStateOf<LidarViewshedResult?>(lidarResult) }
 
     val dragController = remember { RfPinDragController() }
     val overlayPool = remember { CrispOverlayPool() }
@@ -194,11 +201,31 @@ fun MeshRfMapCanvas(
                             controller.setCenter(initialCenter)
                         }
                         else -> {
-                            val txLat = if (mode == WorkspaceMode.VIEWSHED) viewshedTxLat else bridgeTxLat
-                            val txLon = if (mode == WorkspaceMode.VIEWSHED) viewshedTxLon else bridgeTxLon
-                            val rxLat = if (mode == WorkspaceMode.VIEWSHED) viewshedRxLat else bridgeRxLat
-                            val rxLon = if (mode == WorkspaceMode.VIEWSHED) viewshedRxLon else bridgeRxLon
-                            controller.setZoom(10.5)
+                            val txLat = when (mode) {
+                                WorkspaceMode.VIEWSHED -> viewshedTxLat
+                                WorkspaceMode.BRIDGE -> bridgeTxLat
+                                WorkspaceMode.LIDAR_STREET -> lidarTxLat
+                                WorkspaceMode.MESH -> null
+                            }
+                            val txLon = when (mode) {
+                                WorkspaceMode.VIEWSHED -> viewshedTxLon
+                                WorkspaceMode.BRIDGE -> bridgeTxLon
+                                WorkspaceMode.LIDAR_STREET -> lidarTxLon
+                                WorkspaceMode.MESH -> null
+                            }
+                            val rxLat = when (mode) {
+                                WorkspaceMode.VIEWSHED -> viewshedRxLat
+                                WorkspaceMode.BRIDGE -> bridgeRxLat
+                                WorkspaceMode.LIDAR_STREET -> null
+                                WorkspaceMode.MESH -> null
+                            }
+                            val rxLon = when (mode) {
+                                WorkspaceMode.VIEWSHED -> viewshedRxLon
+                                WorkspaceMode.BRIDGE -> bridgeRxLon
+                                WorkspaceMode.LIDAR_STREET -> null
+                                WorkspaceMode.MESH -> null
+                            }
+                            controller.setZoom(if (mode == WorkspaceMode.LIDAR_STREET) 16.0 else 10.5)
                             controller.setCenter(resolveInitialRfMapCenter(txLat, txLon, rxLat, rxLon, nodes))
                         }
                     }
@@ -272,6 +299,14 @@ fun MeshRfMapCanvas(
                             GeoPoint(bridgeRxLat, bridgeRxLon)
                         } else null
                     }
+                    WorkspaceMode.LIDAR_STREET -> {
+                        activeTxPoint = if (dragController.draggingTarget == RfPinEndpoint.TX) {
+                            dragController.txMarker?.position
+                        } else if (lidarTxLat != null && lidarTxLon != null) {
+                            GeoPoint(lidarTxLat, lidarTxLon)
+                        } else null
+                        activeRxPoint = null
+                    }
                 }
 
                 mapView.overlays.clear()
@@ -291,7 +326,7 @@ fun MeshRfMapCanvas(
                                         false
                                     }
                                 }
-                                WorkspaceMode.VIEWSHED, WorkspaceMode.BRIDGE -> {
+                                WorkspaceMode.VIEWSHED, WorkspaceMode.BRIDGE, WorkspaceMode.LIDAR_STREET -> {
                                     currentOnMapTap(p.latitude, p.longitude)
                                     true
                                 }
@@ -378,6 +413,23 @@ fun MeshRfMapCanvas(
                             onObstructionTap = { obsId -> currentOnObstructionTap(obsId) }
                         )
                     }
+                    WorkspaceMode.LIDAR_STREET -> {
+                        addLidarStreetOverlays(
+                            context = mapView.context,
+                            mapView = mapView,
+                            dragController = dragController,
+                            overlayPool = overlayPool,
+                            activePoolKeys = activePoolKeys,
+                            activeTxPoint = activeTxPoint,
+                            radiusMeters = lidarRadiusMeters,
+                            existingNodes = nodes,
+                            showNodeDbAndSavedLayers = showContinuityOverlays,
+                            currentResult = lidarResult,
+                            overlayOpacity = overlayOpacity,
+                            onEndpointPinTap = { endpoint -> currentOnEndpointPinTap(endpoint) },
+                            onNodeTap = { node -> currentOnRfNodeTap(node) }
+                        )
+                    }
                 }
                 overlayPool.pruneExcept(activePoolKeys)
 
@@ -413,9 +465,14 @@ fun MeshRfMapCanvas(
             }
         )
 
-        if (mode == WorkspaceMode.VIEWSHED || mode == WorkspaceMode.BRIDGE) {
+        if (mode == WorkspaceMode.VIEWSHED || mode == WorkspaceMode.BRIDGE || mode == WorkspaceMode.LIDAR_STREET) {
             RfCrosshairReticle(
-                isTxTarget = if (mode == WorkspaceMode.VIEWSHED) viewshedIsTxTarget else bridgeIsTxTarget,
+                isTxTarget = when (mode) {
+                    WorkspaceMode.VIEWSHED -> viewshedIsTxTarget
+                    WorkspaceMode.BRIDGE -> bridgeIsTxTarget
+                    WorkspaceMode.LIDAR_STREET -> true
+                    WorkspaceMode.MESH -> true
+                },
                 modifier = Modifier.align(Alignment.Center)
             )
         }
@@ -509,6 +566,20 @@ fun MeshRfMapCanvas(
                 eastLon = bridgeResult.eastLon,
                 southLat = bridgeResult.southLat,
                 westLon = bridgeResult.westLon
+            )
+        }
+    }
+
+    LaunchedEffect(lidarResult, mapViewRef) {
+        val mapView = mapViewRef ?: return@LaunchedEffect
+        if (lidarResult != null && lidarResult != lastFittedLidarResult) {
+            lastFittedLidarResult = lidarResult
+            zoomMapToBoundsSafely(
+                mapView = mapView,
+                northLat = lidarResult.northLat,
+                eastLon = lidarResult.eastLon,
+                southLat = lidarResult.southLat,
+                westLon = lidarResult.westLon
             )
         }
     }

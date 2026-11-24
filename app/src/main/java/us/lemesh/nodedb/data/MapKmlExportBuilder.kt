@@ -1,6 +1,7 @@
 package us.lemesh.nodedb.data
 
 import us.lemesh.nodedb.ui.BridgeUiState
+import us.lemesh.nodedb.ui.LidarStreetUiState
 import us.lemesh.nodedb.ui.MapBaseLayer
 import us.lemesh.nodedb.ui.NodeMapUiState
 import us.lemesh.nodedb.ui.ViewshedUiState
@@ -69,14 +70,14 @@ object MapKmlExportBuilder {
         sb.appendLine("""<kml xmlns="http://www.opengis.net/kml/2.2">""")
         sb.appendLine("  <Document>")
         val docName = if (!uiState.loadedFileName.isNullOrBlank()) {
-            "LEMesh Map - ${uiState.loadedFileName}"
+            "${MapExportEngine.EXPORT_BRAND_ATTRIBUTION} — ${uiState.loadedFileName}"
         } else {
-            "LEMesh Node Map"
+            "${MapExportEngine.EXPORT_BRAND_ATTRIBUTION} — Node Map"
         }
         sb.appendLine("    <name>${escapeXml(docName)}</name>")
         sb.appendLine("    <open>1</open>")
         sb.appendLine(
-            "    <description><![CDATA[Exported from LEMesh NodeDB Map ($exportedAtIso) • " +
+            "    <description><![CDATA[Exported from ${MapExportEngine.EXPORT_BRAND_ATTRIBUTION} ($exportedAtIso) • " +
                 "Base: ${escapeXml(uiState.baseLayer.displayName)} • " +
                 "${plottedNodes.size} GPS nodes plotted]]></description>"
         )
@@ -328,9 +329,9 @@ object MapKmlExportBuilder {
         sb.appendLine("""<?xml version="1.0" encoding="UTF-8"?>""")
         sb.appendLine("""<kml xmlns="http://www.opengis.net/kml/2.2">""")
         sb.appendLine("  <Document>")
-        sb.appendLine("    <name>${escapeXml("LEMesh Viewshed - ${uiState.siteLabel}")}</name>")
+        sb.appendLine("    <name>${escapeXml("${MapExportEngine.EXPORT_BRAND_ATTRIBUTION} — Viewshed (${uiState.siteLabel})")}</name>")
         sb.appendLine(
-            "    <description><![CDATA[Exported $exportedAtIso • Base: ${escapeXml(baseLayerName)} • " +
+            "    <description><![CDATA[Exported from ${MapExportEngine.EXPORT_BRAND_ATTRIBUTION} ($exportedAtIso) • Base: ${escapeXml(baseLayerName)} • " +
                 "Radius: ${uiState.radiusKm} km • ${uiState.txPowerDbm.roundToInt()} dBm • ${uiState.antennaGainDbi} dBi]]></description>"
         )
 
@@ -456,9 +457,9 @@ object MapKmlExportBuilder {
         sb.appendLine("""<?xml version="1.0" encoding="UTF-8"?>""")
         sb.appendLine("""<kml xmlns="http://www.opengis.net/kml/2.2">""")
         sb.appendLine("  <Document>")
-        sb.appendLine("    <name>${escapeXml("LEMesh Bridge - ${uiState.txLabel} to ${uiState.rxLabel}")}</name>")
+        sb.appendLine("    <name>${escapeXml("${MapExportEngine.EXPORT_BRAND_ATTRIBUTION} — Bridge (${uiState.txLabel} to ${uiState.rxLabel})")}</name>")
         sb.appendLine(
-            "    <description><![CDATA[Exported $exportedAtIso • Base: ${escapeXml(baseLayerName)} • " +
+            "    <description><![CDATA[Exported from ${MapExportEngine.EXPORT_BRAND_ATTRIBUTION} ($exportedAtIso) • Base: ${escapeXml(baseLayerName)} • " +
                 "TX: ${uiState.txPowerDbm.roundToInt()} dBm/${uiState.txAntennaGainDbi} dBi • " +
                 "RX: ${uiState.rxPowerDbm.roundToInt()} dBm/${uiState.rxAntennaGainDbi} dBi • " +
                 "Relay: ${uiState.relayPowerDbm.roundToInt()} dBm/${uiState.relayAntennaGainDbi} dBi]]></description>"
@@ -597,6 +598,72 @@ object MapKmlExportBuilder {
                 styleId = "line_direct",
                 descriptionHtml = "Un-solved direct path",
                 coords = listOf(uiState.txLat to uiState.txLon, uiState.rxLat to uiState.rxLon)
+            )
+        }
+
+        sb.appendLine("  </Document>")
+        sb.appendLine("</kml>")
+        return sb.toString()
+    }
+
+    fun buildLidarKml(
+        uiState: LidarStreetUiState,
+        baseLayerName: String = MapBaseLayer.DARK_MATTER.displayName,
+        exportedAtIso: String = MapExportEngine.formatIsoTimestamp()
+    ): String {
+        val sb = StringBuilder(2048)
+        sb.appendLine("""<?xml version="1.0" encoding="UTF-8"?>""")
+        sb.appendLine("""<kml xmlns="http://www.opengis.net/kml/2.2">""")
+        sb.appendLine("  <Document>")
+        sb.appendLine("    <name>${escapeXml("${MapExportEngine.EXPORT_BRAND_ATTRIBUTION} — LiDAR Street (${uiState.siteLabel})")}</name>")
+        sb.appendLine(
+            "    <description><![CDATA[Exported from ${MapExportEngine.EXPORT_BRAND_ATTRIBUTION} ($exportedAtIso) • Base: ${escapeXml(baseLayerName)} • " +
+                "Source: ${escapeXml(uiState.activeSourceLabel)} • Radius: ${uiState.radiusMeters} m • TX ${uiState.txHeightFt.roundToInt()} ft AGL • RX ${uiState.rxHeightFt.roundToInt()} ft AGL (SX1262 -134 dBm)]]></description>"
+        )
+
+        appendIconStyle(sb, "pin_tx", 0xFFF59E0B.toInt(), 1.3, KML_SITE_PIN_URL)
+        appendPolyStyle(sb, "poly_lidar", 0xFF22C55E.toInt())
+
+        val txLat = uiState.txLat
+        val txLon = uiState.txLon
+        if (txLat != null && txLon != null) {
+            appendPointPlacemark(
+                sb = sb,
+                indent = "    ",
+                name = "TX: ${uiState.siteLabel}",
+                styleId = "pin_tx",
+                descriptionHtml = String.format(
+                    Locale.US,
+                    "<b>Height:</b> %.0f ft (%.1f m) AGL • <b>TX Power:</b> %.0f dBm • <b>Gain:</b> %.1f dBi",
+                    uiState.txHeightFt,
+                    uiState.txHeightFt * LidarViewshedEngine.FEET_TO_METERS,
+                    uiState.txPowerDbm,
+                    uiState.antennaGainDbi
+                ),
+                lat = txLat,
+                lon = txLon,
+                alt = uiState.groundElevationMeters
+            )
+        }
+
+        uiState.currentResult?.let { res ->
+            appendCirclePolygonPlacemark(
+                sb = sb,
+                indent = "    ",
+                name = "LiDAR Scan Radius (${res.params.radiusMeters} m)",
+                styleId = "poly_lidar",
+                descriptionHtml = String.format(
+                    Locale.US,
+                    "<b>Covered Area:</b> %.2f ac (%,.0f m²)<br/><b>Max Clear Range:</b> %.0f m (%.0f ft)<br/><b>Corridor ≥60%% F1:</b> %.1f%%",
+                    res.coveredAreaAcres,
+                    res.coveredAreaSqMeters,
+                    res.maxClearRangeMeters,
+                    res.maxClearRangeMeters * LidarViewshedEngine.METERS_TO_FEET,
+                    res.corridorClearancePct
+                ),
+                centerLat = res.params.originLat,
+                centerLon = res.params.originLon,
+                radiusKm = res.params.radiusMeters / 1000.0
             )
         }
 

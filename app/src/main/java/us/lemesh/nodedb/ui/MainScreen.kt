@@ -2,9 +2,6 @@ package us.lemesh.nodedb.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,24 +12,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AddLocationAlt
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.CloudOff
-import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -52,17 +39,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import us.lemesh.nodedb.R
@@ -79,9 +62,6 @@ import us.lemesh.nodedb.ui.theme.NodeSelfAmber
 import us.lemesh.nodedb.ui.theme.TacticalCanvas
 import us.lemesh.nodedb.ui.theme.TacticalOutline
 import us.lemesh.nodedb.ui.theme.TacticalSurface
-import us.lemesh.nodedb.ui.theme.TacticalSurfaceBright
-import us.lemesh.nodedb.ui.theme.TacticalSurfaceElevated
-import us.lemesh.nodedb.ui.theme.TextMuted
 import us.lemesh.nodedb.ui.theme.TextPrimary
 import us.lemesh.nodedb.ui.theme.TextSecondary
 import org.osmdroid.views.MapView
@@ -173,6 +153,7 @@ fun MainScreen(
     var showClearConfirmDialog by remember { mutableStateOf(false) }
     var alsoClearManualNodes by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
+    var isTopCardExpanded by rememberSaveable { mutableStateOf(true) }
     var activeMapView by remember { mutableStateOf<MapView?>(null) }
 
     val activeFilterCount = (if (!uiState.showMqtt) 1 else 0) +
@@ -251,7 +232,7 @@ fun MainScreen(
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Compact Search Bar + Filters & Layers triggers
+            // Unified Collapsible Top Card
             Column(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -261,102 +242,26 @@ fun MainScreen(
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                CompactNodeMapSearchBar(
-                    searchQuery = uiState.searchQuery,
-                    activeFilterCount = activeFilterCount,
+                UnifiedHorizonTopCard(
+                    expanded = isTopCardExpanded,
+                    onToggleExpanded = { isTopCardExpanded = !isTopCardExpanded },
                     savedLayersActiveCount = layersBadgeCount,
-                    onSearchQueryChange = onSearchQueryChange,
-                    onOpenFilters = { showFiltersSheet = true },
                     onOpenLayers = { showSavedLayersSheet = true }
-                )
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (!uiState.hasLoadedFile && !uiState.isLoading) {
-                        Button(
-                            onClick = onLoadJsonClick,
-                            shape = RoundedCornerShape(20.dp),
-                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = NodeDirectGreen,
-                                contentColor = TacticalCanvas
-                            ),
-                            modifier = Modifier
-                                .minimumInteractiveComponentSize()
-                                .testTag("load_json_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.FolderOpen,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = stringResource(R.string.action_load_json),
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        if (!uiState.isAddNodeMode) {
-                            OutlinedButton(
-                                onClick = onToggleAddNodeMode,
-                                shape = RoundedCornerShape(20.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                                border = BorderStroke(1.dp, NodeMultiHopSky.copy(alpha = 0.7f)),
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    containerColor = TacticalSurface.copy(alpha = 0.92f),
-                                    contentColor = NodeMultiHopSky
-                                ),
-                                modifier = Modifier
-                                    .minimumInteractiveComponentSize()
-                                    .testTag("standby_add_node_button")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.AddLocationAlt,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = stringResource(R.string.action_add_node),
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
-                        }
-                    }
-
-                    if (hasFilteredSubset) {
-                        Surface(
-                            onClick = resetVisibilityFilters,
-                            color = TacticalSurface.copy(alpha = 0.92f),
-                            shape = RoundedCornerShape(18.dp),
-                            border = BorderStroke(1.dp, NodeMultiHopSky.copy(alpha = 0.5f)),
-                            modifier = Modifier.heightIn(min = 36.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Text(
-                                    text = "${uiState.filteredMapNodes.size}/${uiState.plottedGpsCount} GPS",
-                                    fontFamily = JetBrainsMonoFontFamily,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = NodeMultiHopSky
-                                )
-                                Text(
-                                    text = "• Reset",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = TextSecondary
-                                )
-                            }
-                        }
-                    }
+                    UnifiedMeshTopCardBody(
+                        searchQuery = uiState.searchQuery,
+                        activeFilterCount = activeFilterCount,
+                        onSearchQueryChange = onSearchQueryChange,
+                        onOpenFilters = { showFiltersSheet = true },
+                        showStandbyActions = !uiState.hasLoadedFile && !uiState.isLoading,
+                        showAddNodeButton = !uiState.isAddNodeMode,
+                        onLoadJsonClick = onLoadJsonClick,
+                        onToggleAddNodeMode = onToggleAddNodeMode,
+                        hasFilteredSubset = hasFilteredSubset,
+                        filteredCount = uiState.filteredMapNodes.size,
+                        plottedGpsCount = uiState.plottedGpsCount,
+                        onResetFilters = resetVisibilityFilters
+                    )
                 }
 
                 AnimatedVisibility(visible = uiState.isAggregateCoverageLoading) {
@@ -915,228 +820,6 @@ fun MainScreen(
         buildNodeDbBackupJson = onBuildNodeDbBackupJson,
         onDismiss = { showExportDialog = false }
     )
-}
-
-@Composable
-internal fun CompactNodeMapSearchBar(
-    searchQuery: String,
-    activeFilterCount: Int,
-    savedLayersActiveCount: Int,
-    onSearchQueryChange: (String) -> Unit,
-    onOpenFilters: () -> Unit,
-    onOpenLayers: () -> Unit,
-    isOfflineOnlyMode: Boolean = false,
-    isOfflineDownloading: Boolean = false,
-    onOpenOfflineMaps: (() -> Unit)? = null
-) {
-    Surface(
-        color = TacticalSurface.copy(alpha = 0.93f),
-        shape = RoundedCornerShape(16.dp),
-        tonalElevation = 4.dp,
-        shadowElevation = 4.dp,
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(1.dp, TacticalOutline, RoundedCornerShape(16.dp))
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Image(
-                painter = painterResource(id = R.drawable.lemesh_brand_emblem),
-                contentDescription = stringResource(R.string.lemesh_brand_emblem_cd),
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .size(26.dp)
-                    .clip(CircleShape)
-                    .border(1.dp, TacticalOutline, CircleShape)
-                    .testTag("toolbar_lemesh_emblem")
-            )
-
-            Icon(
-                imageVector = Icons.Default.Search,
-                contentDescription = null,
-                tint = TextSecondary,
-                modifier = Modifier.size(18.dp)
-            )
-
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = 40.dp),
-                contentAlignment = Alignment.CenterStart
-            ) {
-                if (searchQuery.isEmpty()) {
-                    Text(
-                        text = stringResource(R.string.search_placeholder),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextMuted,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                BasicTextField(
-                    value = searchQuery,
-                    onValueChange = onSearchQueryChange,
-                    singleLine = true,
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(
-                        fontFamily = JetBrainsMonoFontFamily,
-                        color = TextPrimary
-                    ),
-                    cursorBrush = SolidColor(NodeDirectGreen),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("map_search_input")
-                )
-            }
-
-            if (searchQuery.isNotEmpty()) {
-                IconButton(
-                    onClick = { onSearchQueryChange("") },
-                    modifier = Modifier.minimumInteractiveComponentSize()
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = stringResource(R.string.action_clear_search),
-                        tint = TextSecondary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            }
-
-            // Filters Sheet Trigger
-            Surface(
-                onClick = onOpenFilters,
-                color = if (activeFilterCount > 0) NodeMultiHopSky.copy(alpha = 0.16f) else TacticalSurfaceElevated,
-                shape = RoundedCornerShape(10.dp),
-                border = BorderStroke(
-                    1.dp,
-                    if (activeFilterCount > 0) NodeMultiHopSky.copy(alpha = 0.7f) else TacticalOutline
-                ),
-                modifier = Modifier
-                    .minimumInteractiveComponentSize()
-                    .testTag("map_filters_button")
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Tune,
-                        contentDescription = stringResource(R.string.map_filters_tools_title),
-                        tint = if (activeFilterCount > 0) NodeMultiHopSky else TextPrimary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Text(
-                        text = stringResource(R.string.map_filters_short),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = if (activeFilterCount > 0) NodeMultiHopSky else TextPrimary
-                    )
-                    if (activeFilterCount > 0) {
-                        Box(
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .background(NodeMultiHopSky)
-                                .padding(horizontal = 5.dp, vertical = 1.dp)
-                        ) {
-                            Text(
-                                text = activeFilterCount.toString(),
-                                fontFamily = JetBrainsMonoFontFamily,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 10.sp,
-                                color = TacticalCanvas
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Saved Layers Sheet Trigger
-            Surface(
-                onClick = onOpenLayers,
-                color = if (savedLayersActiveCount > 0) NodeDirectGreen.copy(alpha = 0.16f) else TacticalSurfaceElevated,
-                shape = RoundedCornerShape(10.dp),
-                border = BorderStroke(
-                    1.dp,
-                    if (savedLayersActiveCount > 0) NodeDirectGreen.copy(alpha = 0.7f) else TacticalOutline
-                ),
-                modifier = Modifier
-                    .minimumInteractiveComponentSize()
-                    .testTag("chip_saved_layers")
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Layers,
-                        contentDescription = stringResource(R.string.saved_layers_title),
-                        tint = if (savedLayersActiveCount > 0) NodeDirectGreen else TextSecondary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    if (savedLayersActiveCount > 0) {
-                        Box(
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .background(NodeDirectGreen)
-                                .padding(horizontal = 5.dp, vertical = 1.dp)
-                        ) {
-                            Text(
-                                text = savedLayersActiveCount.toString(),
-                                fontFamily = JetBrainsMonoFontFamily,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 10.sp,
-                                color = TacticalCanvas
-                            )
-                        }
-                    }
-                }
-            }
-            if (onOpenOfflineMaps != null) {
-                Surface(
-                    onClick = onOpenOfflineMaps,
-                    color = when {
-                        isOfflineOnlyMode -> NodeSelfAmber.copy(alpha = 0.18f)
-                        isOfflineDownloading -> NodeDirectGreen.copy(alpha = 0.18f)
-                        else -> TacticalSurfaceElevated
-                    },
-                    shape = RoundedCornerShape(10.dp),
-                    border = BorderStroke(
-                        1.dp,
-                        when {
-                            isOfflineOnlyMode -> NodeSelfAmber.copy(alpha = 0.75f)
-                            isOfflineDownloading -> NodeDirectGreen.copy(alpha = 0.75f)
-                            else -> TacticalOutline
-                        }
-                    ),
-                    modifier = Modifier
-                        .minimumInteractiveComponentSize()
-                        .testTag("offline_maps_toolbar_button")
-                ) {
-                    Box(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = if (isOfflineOnlyMode) Icons.Default.CloudOff else Icons.Default.CloudDownload,
-                            contentDescription = stringResource(R.string.action_offline_maps),
-                            tint = when {
-                                isOfflineOnlyMode -> NodeSelfAmber
-                                isOfflineDownloading -> NodeDirectGreen
-                                else -> TextSecondary
-                            },
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
-            }
-        }
-    }
 }
 
 @Composable

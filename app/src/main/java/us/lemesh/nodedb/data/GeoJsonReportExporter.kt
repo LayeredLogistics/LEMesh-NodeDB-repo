@@ -3,6 +3,7 @@ package us.lemesh.nodedb.data
 import org.json.JSONArray
 import org.json.JSONObject
 import us.lemesh.nodedb.ui.BridgeUiState
+import us.lemesh.nodedb.ui.LidarStreetUiState
 import us.lemesh.nodedb.ui.MapBaseLayer
 import us.lemesh.nodedb.ui.NodeMapUiState
 import us.lemesh.nodedb.ui.ViewshedUiState
@@ -856,6 +857,82 @@ object GeoJsonReportExporter {
         return wrapFeatureCollection(features, metadata)
     }
 
+    fun buildLidarGeoJson(
+        uiState: LidarStreetUiState,
+        baseLayerName: String = MapBaseLayer.DARK_MATTER.displayName,
+        exportedAtIso: String = MapExportEngine.formatIsoTimestamp()
+    ): String {
+        val features = JSONArray()
+        val txLat = uiState.txLat
+        val txLon = uiState.txLon
+
+        if (txLat != null && txLon != null) {
+            val maskTx = uiState.sourceNode?.let { it.isManual && it.maskLocationOnExport } == true
+            val (outTxLat, outTxLon) = if (maskTx) maskCoordinateApprox1Km(txLat, txLon) else txLat to txLon
+            features.put(
+                pointFeature(
+                    lat = outTxLat,
+                    lon = outTxLon,
+                    alt = uiState.groundElevationMeters,
+                    props = JSONObject().apply {
+                        put("featureType", "lidar_tx_site")
+                        put("role", "TX")
+                        put("label", uiState.siteLabel)
+                        if (maskTx) put("locationMasked", true)
+                        putOpt("groundElevationMeters", uiState.groundElevationMeters?.let(::round1))
+                        put("txHeightFt", round1(uiState.txHeightFt.toDouble()))
+                        put("txHeightMeters", round2(uiState.txHeightFt * LidarViewshedEngine.FEET_TO_METERS))
+                        putOpt("nodeId", uiState.sourceNode?.id)
+                    }
+                )
+            )
+        }
+
+        uiState.currentResult?.let { res ->
+            features.put(
+                polygonCircleFeature(
+                    centerLat = res.params.originLat,
+                    centerLon = res.params.originLon,
+                    radiusKm = res.params.radiusMeters / 1000.0,
+                    props = JSONObject().apply {
+                        put("featureType", "lidar_viewshed_ring")
+                        put("originLabel", res.params.originLabel)
+                        put("dataSource", res.sourceLabel)
+                        put("terrainResolutionMeters", round2(res.terrainResolutionMeters))
+                        put("radiusMeters", res.params.radiusMeters)
+                        put("coveredAreaSqMeters", round1(res.coveredAreaSqMeters))
+                        put("coveredAreaAcres", round3(res.coveredAreaAcres))
+                        put("maxClearRangeMeters", round1(res.maxClearRangeMeters))
+                        put("corridorClearancePct", round1(res.corridorClearancePct))
+                    }
+                )
+            )
+        }
+
+        val metadata = JSONObject().apply {
+            put("app", "LEMesh NodeDB Map")
+            put("screen", "LiDAR / Street Viewshed")
+            put("baseLayer", baseLayerName)
+            put("exportedAt", exportedAtIso)
+            put("dataSource", uiState.activeSourceLabel)
+            put("gridStepMeters", LidarViewshedEngine.STEP_METERS)
+            uiState.currentResult?.let { res ->
+                put("terrainResolutionMeters", round2(res.terrainResolutionMeters))
+            }
+            put("radiusMeters", uiState.radiusMeters)
+            put("txHeightFt", round1(uiState.txHeightFt.toDouble()))
+            put("rxHeightFt", round1(uiState.rxHeightFt.toDouble()))
+            put("assumedRxRadio", "Semtech SX1262 LongFast (250 kHz, -114 dBm NF, -134 dBm)")
+            put("frequencyMhz", uiState.frequencyText.toDoubleOrNull() ?: LosAnalyzer.DEFAULT_LORA_US_FREQ_MHZ)
+            put("txPowerDbm", round1(uiState.txPowerDbm.toDouble()))
+            put("antennaGainDbi", round1(uiState.antennaGainDbi.toDouble()))
+            put("cableLossDb", round1(uiState.cableLossDb.toDouble()))
+            put("sensitivityDbm", LidarViewshedEngine.SX1262_LONGFAST_SENSITIVITY_DBM)
+        }
+
+        return wrapFeatureCollection(features, metadata)
+    }
+
     fun buildLinkBudgetReportMarkdown(
         bridgeResult: BridgeResult,
         selectedCandidateIndex: Int = 0,
@@ -1156,6 +1233,47 @@ object GeoJsonReportExporter {
             metricLines = metrics,
             legendItems = legend,
             showRssiGradient = result != null
+        )
+    }
+
+    fun buildLidarSummary(
+        uiState: LidarStreetUiState,
+        baseLayer: MapBaseLayer
+    ): MapExportSummary {
+        val metrics = mutableListOf<String>()
+        val txStr = if (uiState.txLat != null && uiState.txLon != null) {
+            String.format(Locale.US, "%.5f, %.5f (%.0fft AGL)", uiState.txLat, uiState.txLon, uiState.txHeightFt)
+        } else "Unset"
+        metrics += "Source: ${uiState.activeSourceLabel} • TX: $txStr • RX ${uiState.rxHeightFt.roundToInt()}ft AGL (SX1262 -134 dBm)"
+
+        uiState.currentResult?.let { res ->
+            metrics += String.format(
+                Locale.US,
+                "Street Viewshed (%d m @ 1.0m): %.2f ac (%,.0f m²) • %.0f m (%.0f ft) max • %.1f%% >=60%% F1",
+                res.params.radiusMeters,
+                res.coveredAreaAcres,
+                res.coveredAreaSqMeters,
+                res.maxClearRangeMeters,
+                res.maxClearRangeMeters * LidarViewshedEngine.METERS_TO_FEET,
+                res.corridorClearancePct
+            )
+        } ?: run {
+            metrics += "Radius: ${uiState.radiusMeters} m (${(uiState.radiusMeters * LidarViewshedEngine.METERS_TO_FEET).roundToInt()} ft) • Freq: ${uiState.frequencyText} MHz • TX ${uiState.txPowerDbm.roundToInt()} dBm"
+        }
+
+        val legend = listOf(
+            ExportLegendItem("TX Site", 0xFFF59E0B.toInt(), ExportLegendShape.PIN),
+            ExportLegendItem("Scan Radius", 0xFF22C55E.toInt(), ExportLegendShape.LINE)
+        )
+
+        return MapExportSummary(
+            screenTitle = "LiDAR Street Viewshed Export",
+            subtitle = "${uiState.siteLabel} • ${uiState.activeSourceLabel}",
+            baseLayerName = baseLayer.displayName,
+            timestampLabel = MapExportEngine.formatDisplayTimestamp(),
+            metricLines = metrics,
+            legendItems = legend,
+            showRssiGradient = uiState.currentResult != null
         )
     }
 

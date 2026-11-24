@@ -127,6 +127,7 @@ internal fun MeshModeSidePanel(
     onOpenOfflineMaps: (() -> Unit)? = null,
     onSelectFadeMarginPreset: ((FadeMarginPreset) -> Unit)? = null,
     onAlignNode: ((MeshNode) -> Unit)? = null,
+    onAssignLidarStreet: ((MeshNode) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val selected = uiState.selectedNode
@@ -139,6 +140,7 @@ internal fun MeshModeSidePanel(
             onAssignViewshedRx = onAssignViewshedRx,
             onAssignBridgeTx = onAssignBridgeTx,
             onAssignBridgeRx = onAssignBridgeRx,
+            onAssignLidarStreet = onAssignLidarStreet,
             onInspectFresnelSightline = if (uiState.selfNode?.hasValidGps == true && !selected.isSelf && selected.hasValidGps) {
                 onInspectFresnelSightline
             } else null,
